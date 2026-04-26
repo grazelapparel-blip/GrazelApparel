@@ -614,79 +614,53 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Admin CRUD Operations for Products
   const addProduct = async (product: Omit<Product, 'id'>) => {
     try {
-      // Insert into Supabase
-      const { data, error } = await supabase
-        .from('products')
-        .insert([
-          {
-            name: product.name,
-            price: product.price,
-            image_url: product.image,
-            fabric: product.fabric,
-            fit: product.fit,
-            category: product.category,
-            sizes: product.size || [],
-            gender: product.gender,
-            is_essential: product.isEssential || false,
-            is_highlight: product.isHighlight || false,
-            is_top: product.isTop || false,
-            is_bottom: product.isBottom || false,
-            offer_percentage: product.offerPercentage || 0,
-            season: product.season || null,
-            festival: product.festival || null,
-            is_active: true,
-            created_at: product.createdAt || new Date().toISOString()
-          }
-        ])
-        .select();
+      const { createProduct } = await import('../../lib/firebase');
+      
+      // Prepare data for Firebase
+      const firebaseProduct = {
+        name: product.name,
+        price: product.price,
+        imageUrl: product.image,
+        fabric: product.fabric,
+        fit: product.fit,
+        category: product.category,
+        sizes: product.size || [],
+        sku: `SKU-${Date.now()}`,
+        isActive: true,
+        description: '',
+        gender: product.gender,
+        isEssential: product.isEssential || false,
+        isHighlight: product.isHighlight || false,
+        isTop: product.isTop || false,
+        isBottom: product.isBottom || false,
+        offerPercentage: product.offerPercentage || 0,
+        season: product.season || '',
+        festival: product.festival || ''
+      };
 
-      if (error) {
-        console.error('Error adding product to Supabase:', error);
-        // Fallback: add to store only
-        const newProduct: Product = {
-          ...product,
-          id: `prod-${Date.now()}`
-        };
-        setProducts(prev => [...prev, newProduct]);
-      } else if (data && data.length > 0) {
+      const result = await createProduct(firebaseProduct);
+      
+      if (result) {
         // Immediately add the product to state
         const newProduct: Product = {
-          name: data[0].name,
-          price: data[0].price,
-          image: data[0].image_url,
-          fabric: data[0].fabric,
-          fit: data[0].fit,
-          category: data[0].category,
-          size: data[0].sizes,
-          gender: data[0].gender,
-          isEssential: data[0].is_essential,
-          isHighlight: data[0].is_highlight,
-          isTop: data[0].is_top,
-          isBottom: data[0].is_bottom,
-          offerPercentage: data[0].offer_percentage,
-          season: data[0].season,
-          festival: data[0].festival,
-          createdAt: data[0].created_at,
-          id: data[0].id
+          ...product,
+          id: result.id
         };
         setProducts(prev => [...prev, newProduct]);
 
         // Refetch to ensure all data is synced
         setTimeout(() => fetchProductsFromSupabase(), 500);
       }
-    } catch (err) {
-      console.error('Failed to add product:', err);
-      // Fallback to store only
-      const newProduct: Product = {
-        ...product,
-        id: `prod-${Date.now()}`
-      };
-      setProducts(prev => [...prev, newProduct]);
+    } catch (err: any) {
+      console.error('Failed to add product to Firebase:', err?.message || err);
+      throw err;
     }
   };
 
   const updateProduct = async (id: string, updates: Partial<Product>) => {
     try {
+      const { updateProduct: updateFirebaseProduct } = await import('../../lib/firebase');
+      
       // Immediately update UI for instant feedback
       setProducts(prev =>
         prev.map(product =>
@@ -694,37 +668,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
         )
       );
 
-      // Update in Supabase
-      const { error } = await supabase
-        .from('products')
-        .update({
-          name: updates.name,
-          price: updates.price,
-          image_url: updates.image,
-          fabric: updates.fabric,
-          fit: updates.fit,
-          category: updates.category,
-          sizes: updates.size,
-          gender: updates.gender,
-          is_essential: updates.isEssential,
-          is_highlight: updates.isHighlight,
-          is_top: updates.isTop,
-          is_bottom: updates.isBottom,
-          offer_percentage: updates.offerPercentage,
-          season: updates.season,
-          festival: updates.festival,
-          created_at: updates.createdAt
-        })
-        .eq('id', id);
+      // Prepare data for Firebase
+      const firebaseUpdates = {
+        name: updates.name,
+        price: updates.price,
+        imageUrl: updates.image,
+        fabric: updates.fabric,
+        fit: updates.fit,
+        category: updates.category,
+        sizes: updates.size,
+        gender: updates.gender,
+        isEssential: updates.isEssential,
+        isHighlight: updates.isHighlight,
+        isTop: updates.isTop,
+        isBottom: updates.isBottom,
+        offerPercentage: updates.offerPercentage,
+        season: updates.season,
+        festival: updates.festival
+      };
 
-      if (error) {
-        console.error('Error updating product in Supabase:', error);
-        // Refresh products to restore correct state
-        await fetchProductsFromSupabase();
-      } else {
-        // Refresh products after successful update
-        setTimeout(() => fetchProductsFromSupabase(), 500);
-      }
+      await updateFirebaseProduct(id, firebaseUpdates);
+      
+      // Refresh products after successful update
+      setTimeout(() => fetchProductsFromSupabase(), 500);
     } catch (err) {
       console.error('Failed to update product:', err);
       // Refresh products on error
@@ -734,94 +700,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const deleteProduct = async (id: string) => {
     try {
-      // Store the deleted product ID to prevent re-adding
-      const deletedProductId = id;
-
+      const { deleteProduct: deleteFirebaseProduct } = await import('../../lib/firebase');
+      
       // Immediately remove from UI for instant feedback
-      setProducts(prev => prev.filter(product => product.id !== deletedProductId));
-
-      // Delete from Supabase (soft delete - set is_active to false)
-      const { error } = await supabase
-        .from('products')
-        .update({ is_active: false })
-        .eq('id', deletedProductId);
-
-      if (error) {
-        console.error('Error deleting product from Supabase:', error);
-        // If delete failed, refresh to restore the product
-        await new Promise(resolve => setTimeout(resolve, 500));
-        await fetchProductsFromSupabase();
-      } else {
-        // Delete was successful
-        // Wait for database to fully process, then verify deletion
-        await new Promise(resolve => setTimeout(resolve, 800));
-
-        // Explicitly fetch to confirm the product is gone
-        const { data, error: fetchError } = await supabase
-          .from('products')
-          .select('*')
-          .eq('is_active', true);
-
-        if (!fetchError && data) {
-          // Set only the active products (excluding the deleted one)
-          const activeProducts = data.map((p: any) => ({
-            id: p.id,
-            name: p.name,
-            price: p.price,
-            image: p.image_url,
-            fabric: p.fabric,
-            fit: p.fit,
-            category: p.category,
-            size: p.sizes,
-            gender: p.gender,
-            isEssential: p.is_essential,
-            isHighlight: p.is_highlight,
-            isTop: p.is_top,
-            isBottom: p.is_bottom,
-            offerPercentage: p.offer_percentage,
-            festival: p.festival,
-            createdAt: p.created_at
-          }));
-          setProducts(activeProducts);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to delete product:', err);
-      // If there's an error, still keep the product removed from UI
       setProducts(prev => prev.filter(product => product.id !== id));
+
+      // Delete from Firebase
+      await deleteFirebaseProduct(id);
+      
+      // Refetch to ensure consistency
+      setTimeout(() => fetchProductsFromSupabase(), 500);
+    } catch (err: any) {
+      console.error('Failed to delete product:', err?.message || err);
+      // If there's an error, refresh to restore the product
+      await new Promise(resolve => setTimeout(resolve, 500));
+      await fetchProductsFromSupabase();
     }
   };
 
   const deleteAllProducts = async () => {
     try {
+      const { deleteProduct: deleteFirebaseProduct, getProducts } = await import('../../lib/firebase');
+      
       // Immediately clear UI for instant feedback
       setProducts([]);
 
-      // Delete all products from Supabase (soft delete - set is_active to false)
-      const { error } = await supabase
-        .from('products')
-        .update({ is_active: false })
-        .eq('is_active', true);
-
-      if (error) {
-        console.error('Error deleting all products from Supabase:', error);
-        // Keep products cleared from UI even if there's an error
-      } else {
-        // Deletion was successful
-        // Wait for database to fully process
-        await new Promise(resolve => setTimeout(resolve, 800));
-
-        // Explicitly fetch to confirm all products are deleted
-        const { data, error: fetchError } = await supabase
-          .from('products')
-          .select('*')
-          .eq('is_active', true);
-
-        if (!fetchError) {
-          // Ensure products list is empty
-          setProducts(data && data.length > 0 ? [] : []);
+      // Get all products
+      const allProducts = await getProducts();
+      
+      // Delete each product
+      if (allProducts && allProducts.length > 0) {
+        for (const product of allProducts) {
+          try {
+            await deleteFirebaseProduct(product.id);
+          } catch (err) {
+            console.error('Error deleting product:', product.id, err);
+          }
         }
       }
+      
+      // Verify deletion
+      await new Promise(resolve => setTimeout(resolve, 800));
+      await fetchProductsFromSupabase();
     } catch (err) {
       console.error('Failed to delete all products:', err);
       // Keep products cleared from UI even on error

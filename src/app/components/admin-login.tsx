@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Lock, Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import { Lock, Eye, EyeOff, ArrowLeft, Loader } from 'lucide-react';
+import { signInUser } from '../../lib/firebase';
 
 interface AdminLoginProps {
   onLogin: () => void;
@@ -11,19 +12,31 @@ export function AdminLogin({ onLogin, onBack }: AdminLoginProps) {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   // Demo credentials
   const ADMIN_EMAIL = 'admin@grazel.com';
   const ADMIN_PASSWORD = 'admin123';
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
 
-    if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
-      onLogin();
-    } else {
-      setError('Invalid email or password');
+    try {
+      // Use Firebase authentication
+      const result = await signInUser(email, password);
+      if (result && result.user) {
+        onLogin();
+      } else {
+        setError('Invalid email or password');
+      }
+    } catch (err: any) {
+      const errorMsg = err?.message || 'Authentication failed';
+      setError(errorMsg);
+      console.error('Login error:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -99,9 +112,17 @@ export function AdminLogin({ onLogin, onBack }: AdminLoginProps) {
 
             <button
               type="submit"
-              className="w-full h-12 bg-[var(--crimson)] text-white text-[14px] font-medium tracking-wide hover:opacity-90 transition-opacity"
+              disabled={loading}
+              className="w-full h-12 bg-[var(--crimson)] text-white text-[14px] font-medium tracking-wide hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              Sign In to Dashboard
+              {loading ? (
+                <>
+                  <Loader size={16} className="animate-spin" />
+                  Signing in...
+                </>
+              ) : (
+                'Sign In to Dashboard'
+              )}
             </button>
           </form>
 
