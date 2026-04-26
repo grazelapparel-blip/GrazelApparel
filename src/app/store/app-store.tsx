@@ -512,13 +512,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return false;
     } catch (error) {
       console.error('Login error:', error);
-      // Fallback to local users if Supabase fails
-      const user = users.find(u => u.email === email && u.password === password);
-      if (user) {
-        setCurrentUser(user);
-        setIsAdmin(false);
-        return true;
-      }
       return false;
     }
   };
@@ -541,22 +534,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return false;
     } catch (error) {
       console.error('Registration error:', error);
-      // Fallback to local registration if Supabase fails
-      const emailExists = users.some(u => u.email === email);
-      if (emailExists) return false;
-
-      const newUser: User = {
-        id: `user-${Date.now()}`,
-        name,
-        email,
-        password,
-        joinedDate: new Date().toISOString().split('T')[0]
-      };
-      
-      setUsers(prev => [...prev, newUser]);
-      setCurrentUser(newUser);
-      setIsAdmin(false);
-      return true;
+      return false;
     }
   };
 
@@ -739,32 +717,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setOrders(prev => prev.filter(order => order.id !== id));
   };
 
-  // Fit Profile Operations
+  // Fit Profile Operations (Local Storage)
   const getFitProfiles = async () => {
     try {
-      const { data, error } = await supabase
-        .from('fit_profiles')
-        .select('*');
-
-      if (error) {
-        console.error('Error fetching fit profiles:', error);
-        return;
-      }
-
-      if (data) {
-        const profiles = data.map((p: any) => ({
-          id: p.id,
-          userId: p.user_id,
-          preferredSize: p.preferred_size,
-          bodyType: p.body_type,
-          height: p.height,
-          weight: p.weight,
-          preferredFit: p.preferred_fit,
-          notes: p.notes,
-          createdAt: p.created_at
-        }));
-        setFitProfiles(profiles as any);
-        console.log('Fit profiles fetched:', profiles);
+      // Load from localStorage
+      const saved = localStorage.getItem('fitProfiles');
+      if (saved) {
+        setFitProfiles(JSON.parse(saved));
       }
     } catch (err) {
       console.error('Failed to fetch fit profiles:', err);
@@ -773,38 +732,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addFitProfile = async (profile: Omit<FitProfile, 'createdAt'>) => {
     try {
-      const { data, error } = await supabase
-        .from('fit_profiles')
-        .insert([
-          {
-            user_id: profile.userId,
-            preferred_size: profile.preferredSize,
-            body_type: profile.bodyType || '',
-            height: profile.height || '',
-            weight: profile.weight || '',
-            preferred_fit: profile.preferredFit || 'regular',
-            notes: profile.notes || ''
-          }
-        ])
-        .select();
-
-      if (error) {
-        console.error('Error adding fit profile:', error);
-      } else if (data && data.length > 0) {
-        const newProfile: FitProfile = {
-          id: data[0].id,
-          userId: data[0].user_id,
-          preferredSize: data[0].preferred_size,
-          bodyType: data[0].body_type,
-          height: data[0].height,
-          weight: data[0].weight,
-          preferredFit: data[0].preferred_fit,
-          notes: data[0].notes,
-          createdAt: data[0].created_at
-        };
-        setFitProfiles(prev => [...prev, newProfile]);
-        console.log('Fit profile added successfully:', newProfile);
-      }
+      const newProfile: FitProfile = {
+        ...profile,
+        id: `fp-${Date.now()}`,
+        createdAt: new Date().toISOString()
+      };
+      setFitProfiles(prev => [...prev, newProfile]);
+      localStorage.setItem('fitProfiles', JSON.stringify([...fitProfiles, newProfile]));
     } catch (err) {
       console.error('Failed to add fit profile:', err);
     }
@@ -812,28 +746,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const updateFitProfile = async (userId: string, profile: Partial<Omit<FitProfile, 'userId' | 'createdAt'>>) => {
     try {
-      const { error } = await supabase
-        .from('fit_profiles')
-        .update({
-          preferred_size: profile.preferredSize,
-          body_type: profile.bodyType,
-          height: profile.height,
-          weight: profile.weight,
-          preferred_fit: profile.preferredFit,
-          notes: profile.notes || ''
-        })
-        .eq('user_id', userId);
-
-      if (error) {
-        console.error('Error updating fit profile:', error);
-      } else {
-        setFitProfiles(prev =>
-          prev.map(p =>
-            p.userId === userId ? { ...p, ...profile } : p
-          )
-        );
-        await getFitProfiles();
-      }
+      const updated = fitProfiles.map(p =>
+        p.userId === userId ? { ...p, ...profile } : p
+      );
+      setFitProfiles(updated);
+      localStorage.setItem('fitProfiles', JSON.stringify(updated));
     } catch (err) {
       console.error('Failed to update fit profile:', err);
     }
@@ -842,16 +759,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Admin Delete Operations for Fit Profiles
   const deleteFitProfile = async (userId: string) => {
     try {
-      const { error } = await supabase
-        .from('fit_profiles')
-        .delete()
-        .eq('user_id', userId);
-
-      if (error) {
-        console.error('Error deleting fit profile:', error);
-      } else {
-        setFitProfiles(prev => prev.filter(profile => profile.userId !== userId));
-      }
+      const updated = fitProfiles.filter(profile => profile.userId !== userId);
+      setFitProfiles(updated);
+      localStorage.setItem('fitProfiles', JSON.stringify(updated));
     } catch (err) {
       console.error('Failed to delete fit profile:', err);
     }
