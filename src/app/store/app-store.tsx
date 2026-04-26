@@ -153,9 +153,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return saved ? JSON.parse(saved) : null;
   });
   const [isAdmin, setIsAdmin] = useState(false);
-  const [supabaseConnected, setSupabaseConnected] = useState(true);
 
-  // Set up Supabase auth listener on mount
+  // Set up Firebase auth listener on mount
   useEffect(() => {
     // First restore from sessionStorage (per-tab with unique SESSION_ID)
     const saved = sessionStorage.getItem(`currentUser_${SESSION_ID}`);
@@ -223,41 +222,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [cartItems, currentUser]);
 
-  // Fetch products from Supabase on mount and set up real-time listener
+  // Fetch products from Firebase on mount
   useEffect(() => {
     let mounted = true;
-    let productSubscription: any = null;
 
     const initializeData = async () => {
       try {
-        await fetchProductsFromSupabase();
-        await fetchUsersFromSupabase();
-
-        if (mounted && supabaseConnected) {
-          // Only set up real-time subscription if Supabase is connected
-          try {
-            productSubscription = supabase
-              .channel('products')
-              .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'products' },
-                () => {
-                  // Refetch products when any change occurs
-                  if (mounted) {
-                    fetchProductsFromSupabase();
-                  }
-                }
-              )
-              .subscribe((status) => {
-                if (status === 'SUBSCRIPTION_ERROR' || status === 'CHANNEL_ERROR') {
-                  console.warn('[Store] WebSocket subscription failed - realtime updates disabled');
-                  // Don't set supabaseConnected to false - REST API still works
-                }
-              });
-          } catch (err) {
-            console.warn('[Store] Could not set up WebSocket subscription:', err);
-            setSupabaseConnected(false);
-          }
+        if (mounted) {
+          await fetchProductsFromSupabase();
+          await fetchUsersFromSupabase();
         }
       } catch (err) {
         console.error('[Store] Error initializing data:', err);
@@ -266,23 +239,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     initializeData();
 
-    // No polling - only fetch on mount and real-time updates
-    // Polling was causing excessive API calls
-
     return () => {
       mounted = false;
-      if (productSubscription) {
-        try {
-          productSubscription.unsubscribe();
-        } catch (err) {
-          console.warn('[Store] Error unsubscribing from WebSocket:', err);
-        }
-      }
     };
-  }, []); // Only run on mount - removed supabaseConnected to prevent infinite loop
+  }, []); // Only run on mount
 
   const fetchProductsFromSupabase = async () => {
-    // Empty mock products - products will come from Firebase only
+    // Fetch products from Firebase
     const mockProducts: Product[] = [];
 
     try {
@@ -291,13 +254,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       if (!firebaseProducts || firebaseProducts.length === 0) {
         console.log('[Store] No products found in Firebase database.');
-        setSupabaseConnected(true);
         setProducts([]);
         return;
       }
 
       // Successfully fetched from Firebase
-      setSupabaseConnected(true);
       console.log('[Store] Successfully fetched products from Firebase');
 
       // Convert Firebase products to app format
@@ -340,7 +301,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         console.error('[Store] Failed to fetch products from Firebase:', errorMsg);
       }
 
-      setSupabaseConnected(false);
       setProducts(mockProducts);
     }
   };
@@ -534,7 +494,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(favKey);
   };
 
-  // User Authentication with Supabase
+  // User Authentication with Firebase
   const loginUser = async (email: string, password: string): Promise<boolean> => {
     try {
       const { user, session } = await signInUser(email, password);
