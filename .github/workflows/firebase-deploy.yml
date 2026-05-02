@@ -1,0 +1,30 @@
+name: Firebase Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      
+      - name: Install dependencies
+        run: npm install
+      
+      - name: Build
+        run: npm run build
+      
+      - name: Deploy to Firebase
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          rebaseConflicts: false
+          channelId: live
+          projectId: grazelapparel-a3691
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}

@@ -4,10 +4,47 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../../lib/firebase';
 
 // Types
+export interface PackagingOption {
+  id: string;
+  name: 'simple' | 'elegant' | 'premium' | 'gift';
+  label: string;
+  description: string;
+  price: number;
+}
+
+export interface ReturnRecord {
+  id: string;
+  orderId: string;
+  userId: string;
+  productId: string;
+  reason: string;
+  status: 'requested' | 'approved' | 'rejected' | 'completed';
+  requestedDate: string;
+  resolvedDate?: string;
+}
+
+export interface NavigationMenuItem {
+  id: string;
+  label: string;
+  path: string;
+  isActive: boolean;
+  order: number;
+}
+
+export interface UserAnalytics {
+  userId: string;
+  totalOrders: number;
+  totalSpent: number;
+  lastOrderDate?: string;
+  frequencyScore: number; // 0-100
+  returnRate: number;
+  averageOrderValue: number;
+}
+
 export interface Product {
   id: string;
   name: string;
-  price: number;
+  price: number; // In Indian Rupees (₹)
   image: string;
   fabric: string;
   fit: string;
@@ -21,12 +58,14 @@ export interface Product {
   offerPercentage?: number;
   season?: string;
   festival?: string;
+  stock: number; // Available quantity
   createdAt?: string;
 }
 
 export interface CartItem extends Product {
   quantity: number;
   selectedSize: string;
+  selectedPackaging?: PackagingOption;
   userId?: string; // Track which user owns this cart item
 }
 
@@ -43,6 +82,8 @@ export interface User {
     postcode: string;
     country: string;
   };
+  isFrequentCustomer?: boolean;
+  lastPurchaseDate?: string;
 }
 
 export interface Order {
@@ -50,7 +91,9 @@ export interface Order {
   userId: string;
   items: CartItem[];
   total: number;
-  status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
+  packagingPrice?: number;
+  packaging?: PackagingOption;
+  status: 'ordered' | 'acknowledged' | 'shipping' | 'delivered' | 'cancelled';
   createdAt: string;
   shippingAddress: {
     street: string;
@@ -58,6 +101,7 @@ export interface Order {
     postcode: string;
     country: string;
   };
+  returns?: ReturnRecord[];
 }
 
 export interface FitProfile {
@@ -81,13 +125,16 @@ interface AppState {
   cartItems: CartItem[];
   products: Product[];
   fitProfiles: FitProfile[];
-  favorites: Product[]; // Array of favorite/liked products
+  favorites: Product[];
+  returns: ReturnRecord[];
+  navigationMenu: NavigationMenuItem[];
+  packagingOptions: PackagingOption[];
   currentUser: User | null;
   isAdmin: boolean;
 }
 
 interface AppContextType extends AppState {
-  addToCart: (product: Product, size: string, quantity: number) => void;
+  addToCart: (product: Product, size: string, quantity: number, packaging?: PackagingOption) => void;
   removeFromCart: (productId: string) => void;
   updateCartQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
@@ -119,6 +166,28 @@ interface AppContextType extends AppState {
   updateUser: (id: string, user: Partial<User>) => void;
   deleteUser: (id: string) => void;
   deleteOrder: (id: string) => void;
+  // Stock management
+  updateStock: (productId: string, quantity: number) => void;
+  getAvailableStock: (productId: string) => number;
+  // Packaging management
+  addPackagingOption: (option: Omit<PackagingOption, 'id'>) => void;
+  updatePackagingOption: (id: string, option: Partial<PackagingOption>) => void;
+  deletePackagingOption: (id: string) => void;
+  // Returns management
+  requestReturn: (orderId: string, productId: string, reason: string) => void;
+  updateReturnStatus: (returnId: string, status: ReturnRecord['status']) => void;
+  deleteReturn: (returnId: string) => void;
+  getOrderReturns: (orderId: string) => ReturnRecord[];
+  // Navigation management
+  updateNavigationMenu: (menu: NavigationMenuItem[]) => void;
+  addNavMenuItem: (item: Omit<NavigationMenuItem, 'id'>) => void;
+  updateNavMenuItem: (id: string, item: Partial<NavigationMenuItem>) => void;
+  deleteNavMenuItem: (id: string) => void;
+  // User analytics
+  getUserAnalytics: (userId: string) => UserAnalytics | null;
+  getFrequentUsers: (minOrders: number) => User[];
+  getUserActivity: () => UserAnalytics[];
+  getReturnStats: () => { totalReturns: number; approvedReturns: number; returnRate: number };
 }
 
 // Mock data
@@ -129,6 +198,23 @@ const mockProducts: Product[] = [];
 const mockOrders: Order[] = [];
 
 const mockFitProfiles: FitProfile[] = [];
+
+const mockPackagingOptions: PackagingOption[] = [
+  { id: 'pkg-1', name: 'simple', label: 'Simple Package', description: 'Basic packaging', price: 0 },
+  { id: 'pkg-2', name: 'elegant', label: 'Elegant Package', description: 'Premium wrapping', price: 50 },
+  { id: 'pkg-3', name: 'premium', label: 'Premium Package', description: 'Luxury packaging with ribbons', price: 100 },
+  { id: 'pkg-4', name: 'gift', label: 'Gift Package', description: 'Special gift wrapping', price: 150 }
+];
+
+const mockNavigationMenu: NavigationMenuItem[] = [
+  { id: 'nav-1', label: 'Men', path: '/men', isActive: true, order: 1 },
+  { id: 'nav-2', label: 'Women', path: '/women', isActive: true, order: 2 },
+  { id: 'nav-3', label: 'Essentials', path: '/essentials', isActive: true, order: 3 },
+  { id: 'nav-4', label: 'New In', path: '/new-in', isActive: true, order: 4 },
+  { id: 'nav-5', label: 'Collections', path: '/collections', isActive: true, order: 5 }
+];
+
+const mockReturns: ReturnRecord[] = [];
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -143,6 +229,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [products, setProducts] = useState<Product[]>(mockProducts);
   const [fitProfiles, setFitProfiles] = useState<FitProfile[]>(mockFitProfiles);
+  const [returns, setReturns] = useState<ReturnRecord[]>(mockReturns);
+  const [packagingOptions, setPackagingOptions] = useState<PackagingOption[]>(mockPackagingOptions);
+  const [navigationMenu, setNavigationMenu] = useState<NavigationMenuItem[]>(mockNavigationMenu);
   const [favorites, setFavorites] = useState<Product[]>(() => {
     // Don't load on init - will load after user logs in
     return [];
@@ -343,7 +432,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const addToCart = (product: Product, size: string, quantity: number) => {
+  const addToCart = (product: Product, size: string, quantity: number, packaging?: PackagingOption) => {
     // Only add to cart if user is logged in
     if (!currentUser) {
       console.warn('User must be logged in to add to cart');
@@ -359,13 +448,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // Update existing item for this user
         return prev.map(item =>
           item.userId === currentUser.id && item.id === product.id && item.selectedSize === size
-            ? { ...item, quantity: item.quantity + quantity }
+            ? { ...item, quantity: item.quantity + quantity, selectedPackaging: packaging }
             : item
         );
       }
 
       // Add new item with userId tracking
-      return [...prev, { ...product, selectedSize: size, quantity, userId: currentUser.id }];
+      return [...prev, { ...product, selectedSize: size, quantity, userId: currentUser.id, selectedPackaging: packaging }];
     });
   };
 
@@ -405,20 +494,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const userCartItems = cartItems.filter(item => item.userId === currentUser.id);
     if (userCartItems.length === 0) return null;
 
+    // Calculate packaging cost (use first item's packaging if available)
+    const packaging = userCartItems[0].selectedPackaging;
+    const packagingPrice = packaging?.price || 0;
+
     const newOrder: Order = {
       id: `ORD-${String(orders.length + 1).padStart(3, '0')}`,
       userId: currentUser.id,
       items: [...userCartItems],
-      total: userCartItems.reduce((sum, item) => sum + item.price * item.quantity, 0),
-      status: 'pending',
+      total: userCartItems.reduce((sum, item) => sum + item.price * item.quantity, 0) + packagingPrice,
+      packagingPrice: packagingPrice,
+      packaging: packaging,
+      status: 'ordered',
       createdAt: new Date().toISOString(),
       shippingAddress: currentUser.address || {
         street: '',
         city: '',
         postcode: '',
         country: 'United Kingdom'
-      }
+      },
+      returns: []
     };
+    
+    // Update stock for each item
+    userCartItems.forEach(item => {
+      updateStock(item.id, -item.quantity);
+    });
+
+    // Update user's last purchase date
+    const updatedUser = { ...currentUser, lastPurchaseDate: new Date().toISOString().split('T')[0] };
+    setCurrentUser(updatedUser);
+    updateUser(currentUser.id, { lastPurchaseDate: updatedUser.lastPurchaseDate });
     
     setOrders(prev => [...prev, newOrder]);
     clearCart();
@@ -767,6 +873,177 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Stock Management
+  const updateStock = (productId: string, quantityChange: number) => {
+    setProducts(prev =>
+      prev.map(product =>
+        product.id === productId
+          ? { ...product, stock: Math.max(0, product.stock + quantityChange) }
+          : product
+      )
+    );
+  };
+
+  const getAvailableStock = (productId: string): number => {
+    const product = products.find(p => p.id === productId);
+    return product?.stock || 0;
+  };
+
+  // Packaging Management
+  const addPackagingOption = (option: Omit<PackagingOption, 'id'>) => {
+    const newOption: PackagingOption = {
+      ...option,
+      id: `pkg-${Date.now()}`
+    };
+    setPackagingOptions(prev => [...prev, newOption]);
+  };
+
+  const updatePackagingOption = (id: string, option: Partial<PackagingOption>) => {
+    setPackagingOptions(prev =>
+      prev.map(pkg =>
+        pkg.id === id ? { ...pkg, ...option } : pkg
+      )
+    );
+  };
+
+  const deletePackagingOption = (id: string) => {
+    setPackagingOptions(prev => prev.filter(pkg => pkg.id !== id));
+  };
+
+  // Returns Management
+  const requestReturn = (orderId: string, productId: string, reason: string) => {
+    if (!currentUser) return;
+
+    const newReturn: ReturnRecord = {
+      id: `RET-${Date.now()}`,
+      orderId,
+      userId: currentUser.id,
+      productId,
+      reason,
+      status: 'requested',
+      requestedDate: new Date().toISOString().split('T')[0]
+    };
+
+    setReturns(prev => [...prev, newReturn]);
+    
+    // Add return record to order
+    setOrders(prev =>
+      prev.map(order =>
+        order.id === orderId
+          ? { ...order, returns: [...(order.returns || []), newReturn] }
+          : order
+      )
+    );
+  };
+
+  const updateReturnStatus = (returnId: string, status: ReturnRecord['status']) => {
+    setReturns(prev =>
+      prev.map(ret =>
+        ret.id === returnId
+          ? {
+              ...ret,
+              status,
+              resolvedDate: ['approved', 'rejected', 'completed'].includes(status)
+                ? new Date().toISOString().split('T')[0]
+                : ret.resolvedDate
+            }
+          : ret
+      )
+    );
+  };
+
+  const deleteReturn = (returnId: string) => {
+    setReturns(prev => prev.filter(ret => ret.id !== returnId));
+    setOrders(prev =>
+      prev.map(order => ({
+        ...order,
+        returns: (order.returns || []).filter(ret => ret.id !== returnId)
+      }))
+    );
+  };
+
+  const getOrderReturns = (orderId: string): ReturnRecord[] => {
+    return returns.filter(ret => ret.orderId === orderId);
+  };
+
+  // Navigation Menu Management
+  const updateNavigationMenu = (menu: NavigationMenuItem[]) => {
+    setNavigationMenu(menu);
+    localStorage.setItem('navigationMenu', JSON.stringify(menu));
+  };
+
+  const addNavMenuItem = (item: Omit<NavigationMenuItem, 'id'>) => {
+    const newItem: NavigationMenuItem = {
+      ...item,
+      id: `nav-${Date.now()}`
+    };
+    const updated = [...navigationMenu, newItem].sort((a, b) => a.order - b.order);
+    updateNavigationMenu(updated);
+  };
+
+  const updateNavMenuItem = (id: string, item: Partial<NavigationMenuItem>) => {
+    const updated = navigationMenu.map(nav =>
+      nav.id === id ? { ...nav, ...item } : nav
+    );
+    updateNavigationMenu(updated);
+  };
+
+  const deleteNavMenuItem = (id: string) => {
+    const updated = navigationMenu.filter(nav => nav.id !== id);
+    updateNavigationMenu(updated);
+  };
+
+  // User Analytics
+  const getUserAnalytics = (userId: string): UserAnalytics | null => {
+    const userOrders = orders.filter(o => o.userId === userId);
+    const userReturns = returns.filter(r => r.userId === userId);
+
+    if (userOrders.length === 0) return null;
+
+    const totalSpent = userOrders.reduce((sum, o) => sum + o.total, 0);
+    const lastOrderDate = userOrders[userOrders.length - 1]?.createdAt;
+    const averageOrderValue = totalSpent / userOrders.length;
+    const frequencyScore = Math.min(100, userOrders.length * 10); // 0-100 scale
+    const approvedReturns = userReturns.filter(r => r.status === 'approved').length;
+    const returnRate = userReturns.length > 0 ? (approvedReturns / userReturns.length) * 100 : 0;
+
+    return {
+      userId,
+      totalOrders: userOrders.length,
+      totalSpent,
+      lastOrderDate,
+      frequencyScore,
+      returnRate,
+      averageOrderValue
+    };
+  };
+
+  const getFrequentUsers = (minOrders: number): User[] => {
+    return users.filter(user => {
+      const userOrders = orders.filter(o => o.userId === user.id);
+      return userOrders.length >= minOrders;
+    });
+  };
+
+  const getUserActivity = (): UserAnalytics[] => {
+    return users
+      .map(user => getUserAnalytics(user.id))
+      .filter((analytics): analytics is UserAnalytics => analytics !== null)
+      .sort((a, b) => b.totalOrders - a.totalOrders);
+  };
+
+  const getReturnStats = () => {
+    const totalReturns = returns.length;
+    const approvedReturns = returns.filter(r => r.status === 'approved').length;
+    const returnRate = totalReturns > 0 ? (approvedReturns / totalReturns) * 100 : 0;
+
+    return {
+      totalReturns,
+      approvedReturns,
+      returnRate
+    };
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -776,6 +1053,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         products,
         fitProfiles,
         favorites,
+        returns,
+        navigationMenu,
+        packagingOptions,
         currentUser,
         isAdmin,
         addToCart,
@@ -809,7 +1089,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addUser,
         updateUser,
         deleteUser,
-        deleteOrder
+        deleteOrder,
+        // Stock management
+        updateStock,
+        getAvailableStock,
+        // Packaging management
+        addPackagingOption,
+        updatePackagingOption,
+        deletePackagingOption,
+        // Returns management
+        requestReturn,
+        updateReturnStatus,
+        deleteReturn,
+        getOrderReturns,
+        // Navigation management
+        updateNavigationMenu,
+        addNavMenuItem,
+        updateNavMenuItem,
+        deleteNavMenuItem,
+        // User analytics
+        getUserAnalytics,
+        getFrequentUsers,
+        getUserActivity,
+        getReturnStats
       }}
     >
       {children}

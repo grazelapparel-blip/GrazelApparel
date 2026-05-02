@@ -17,16 +17,20 @@ import {
   Plus,
   X,
   Save,
-  Tag
+  Tag,
+  TrendingUp,
+  AlertCircle,
+  RotateCcw,
+  Menu
 } from 'lucide-react';
-import { useAppStore, User, Order, FitProfile, Product } from '../store/app-store';
+import { useAppStore, User, Order, FitProfile, Product, NavigationMenuItem, PackagingOption, ReturnRecord, UserAnalytics } from '../store/app-store';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 
 interface AdminDashboardProps {
   onBack: () => void;
 }
 
-type TabType = 'overview' | 'users' | 'orders' | 'categories' | 'products' | 'fit-profiles';
+type TabType = 'overview' | 'users' | 'orders' | 'categories' | 'products' | 'fit-profiles' | 'stock' | 'returns' | 'packaging' | 'navigation' | 'analytics';
 
 // Modal Component
 function Modal({ isOpen, onClose, title, children }: { isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
@@ -50,11 +54,15 @@ function Modal({ isOpen, onClose, title, children }: { isOpen: boolean; onClose:
 
 export function AdminDashboard({ onBack }: AdminDashboardProps) {
   const { 
-    users, orders, products, fitProfiles, cartItems, 
+    users, orders, products, fitProfiles, cartItems, returns, packagingOptions, navigationMenu,
     updateOrderStatus, 
     addProduct, updateProduct, deleteProduct, deleteAllProducts,
     addUser, updateUser, deleteUser,
-    deleteOrder, deleteFitProfile, getFitProfiles
+    deleteOrder, deleteFitProfile, getFitProfiles,
+    updateStock, addPackagingOption, updatePackagingOption, deletePackagingOption,
+    requestReturn, updateReturnStatus, deleteReturn, getOrderReturns,
+    updateNavigationMenu, addNavMenuItem, updateNavMenuItem, deleteNavMenuItem,
+    getUserAnalytics, getFrequentUsers, getUserActivity, getReturnStats
   } = useAppStore();
   
   const [activeTab, setActiveTab] = useState<TabType>('overview');
@@ -74,7 +82,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
 
   // Form states
   const [productForm, setProductForm] = useState({
-    name: '', price: '', image: '', fabric: '', fit: '', category: '', size: '', gender: '', isEssential: false, isHighlight: false, isTop: false, isBottom: false, offerPercentage: '', season: '', festival: ''
+    name: '', price: '', image: '', fabric: '', fit: '', category: '', size: '', gender: '', isEssential: false, isHighlight: false, isTop: false, isBottom: false, offerPercentage: '', season: '', festival: '', stock: '0'
   });
   const [userForm, setUserForm] = useState({
     name: '', email: '', phone: '', street: '', city: '', postcode: '', country: 'United Kingdom'
@@ -90,40 +98,34 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
   };
   const handleDeleteCategory = (cat: string) => {
     setCategories(categories.filter(c => c !== cat));
-    // If the deleted category is selected in the form, clear it
     if (productForm.category === cat) {
       setProductForm({ ...productForm, category: "" });
     }
   };
 
-  // Fetch fit profiles on component mount and when tab is active
   useEffect(() => {
-    getFitProfiles(); // Fetch on mount
+    getFitProfiles();
   }, []);
 
   useEffect(() => {
     if (activeTab === 'fit-profiles') {
-      getFitProfiles(); // Refresh when tab is clicked
+      getFitProfiles();
     }
   }, [activeTab, getFitProfiles]);
 
-  // Fetch users when admin dashboard mounts or when users tab is clicked
-  useEffect(() => {
-    // Trigger a fetch of users from Supabase
-    // The app-store already does this, we just need to ensure it's called
-  }, []);
-
   // Statistics calculations
   const totalRevenue = orders.reduce((sum, order) => sum + order.total, 0);
-  const pendingOrders = orders.filter(o => o.status === 'pending').length;
+  const orderedOrders = orders.filter(o => o.status === 'ordered').length;
   const totalUsers = users.length;
   const totalProducts = products.length;
+  const returnStats = getReturnStats();
+  const frequentUsers = getFrequentUsers(3);
 
   const getStatusColor = (status: Order['status']) => {
     switch (status) {
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'processing': return 'bg-blue-100 text-blue-800';
-      case 'shipped': return 'bg-purple-100 text-purple-800';
+      case 'ordered': return 'bg-blue-100 text-blue-800';
+      case 'acknowledged': return 'bg-yellow-100 text-yellow-800';
+      case 'shipping': return 'bg-purple-100 text-purple-800';
       case 'delivered': return 'bg-green-100 text-green-800';
       case 'cancelled': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
@@ -132,9 +134,9 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
 
   const getStatusIcon = (status: Order['status']) => {
     switch (status) {
-      case 'pending': return <Clock size={14} />;
-      case 'processing': return <Package size={14} />;
-      case 'shipped': return <Truck size={14} />;
+      case 'ordered': return <ShoppingCart size={14} />;
+      case 'acknowledged': return <CheckCircle size={14} />;
+      case 'shipping': return <Truck size={14} />;
       case 'delivered': return <CheckCircle size={14} />;
       case 'cancelled': return <XCircle size={14} />;
       default: return null;
@@ -163,7 +165,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
   // Product CRUD handlers
   const handleAddProduct = () => {
     setEditingProduct(null);
-    setProductForm({ name: '', price: '', image: '', fabric: '', fit: '', category: '', size: '', gender: '', isEssential: false, isHighlight: false, isTop: false, isBottom: false, offerPercentage: '', season: '', festival: '' });
+    setProductForm({ name: '', price: '', image: '', fabric: '', fit: '', category: '', size: '', gender: '', isEssential: false, isHighlight: false, isTop: false, isBottom: false, offerPercentage: '', season: '', festival: '', stock: '0' });
     setShowProductModal(true);
   };
 
@@ -184,7 +186,8 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
       isBottom: product.isBottom || false,
       offerPercentage: String(product.offerPercentage || ''),
       season: product.season || '',
-      festival: product.festival || ''
+      festival: product.festival || '',
+      stock: String(product.stock || 0)
     });
     setShowProductModal(true);
   };
@@ -206,6 +209,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
       offerPercentage: Number(productForm.offerPercentage) || 0,
       season: productForm.season,
       festival: productForm.festival,
+      stock: Number(productForm.stock) || 0,
       createdAt: editingProduct?.createdAt || new Date().toISOString()
     };
 
@@ -301,6 +305,11 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
     { id: 'orders' as TabType, label: 'Orders', icon: ShoppingCart },
     { id: 'categories' as TabType, label: 'Categories', icon: Tag },
     { id: 'products' as TabType, label: 'Products', icon: Package },
+    { id: 'stock' as TabType, label: 'Stock', icon: Package },
+    { id: 'packaging' as TabType, label: 'Packaging', icon: Package },
+    { id: 'returns' as TabType, label: 'Returns', icon: RotateCcw },
+    { id: 'navigation' as TabType, label: 'Navigation', icon: Menu },
+    { id: 'analytics' as TabType, label: 'Analytics', icon: TrendingUp },
     { id: 'fit-profiles' as TabType, label: 'Fit Profiles', icon: Ruler }
   ];
 
@@ -341,18 +350,18 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
 
       <div className="max-w-[1440px] mx-auto px-6 py-8">
         {/* Navigation Tabs */}
-        <nav className="flex gap-2 mb-8 border-b border-gray-200 overflow-x-auto">
+        <nav className="flex gap-2 mb-8 border-b border-gray-200 overflow-x-auto pb-0">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-6 py-3 text-[14px] font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
+              className={`flex items-center gap-2 px-4 py-3 text-[13px] font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
                 activeTab === tab.id
                   ? 'border-[var(--crimson)] text-[var(--crimson)]'
                   : 'border-transparent text-gray-500 hover:text-[var(--charcoal)]'
               }`}
             >
-              <tab.icon size={18} />
+              <tab.icon size={16} />
               {tab.label}
             </button>
           ))}
@@ -361,48 +370,44 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
         {/* Overview Tab */}
         {activeTab === 'overview' && (
           <div className="space-y-8">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="font-[var(--font-serif)] text-[20px] text-[var(--charcoal)]">Dashboard Overview</h2>
-              <button
-                onClick={() => {
-                  // Refresh all data from Supabase
-                  window.location.reload();
-                }}
-                className="px-4 py-2 bg-gray-200 text-gray-800 text-[13px] hover:bg-gray-300 rounded"
-              >
-                Refresh Data
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
               <div className="bg-white p-6 border border-gray-200">
                 <div className="flex items-center justify-between mb-4">
-                  <span className="text-[13px] text-gray-500 uppercase tracking-wide">Total Revenue</span>
-                  <BarChart3 size={20} className="text-[var(--crimson)]" />
+                  <span className="text-[12px] text-gray-500 uppercase tracking-wide">Revenue</span>
+                  <BarChart3 size={18} className="text-[var(--crimson)]" />
                 </div>
-                <p className="font-[var(--font-serif)] text-3xl text-[var(--charcoal)]">₹{totalRevenue.toLocaleString()}</p>
+                <p className="font-[var(--font-serif)] text-2xl text-[var(--charcoal)]">₹{totalRevenue.toLocaleString()}</p>
               </div>
               <div className="bg-white p-6 border border-gray-200">
                 <div className="flex items-center justify-between mb-4">
-                  <span className="text-[13px] text-gray-500 uppercase tracking-wide">Total Orders</span>
-                  <ShoppingCart size={20} className="text-[var(--crimson)]" />
+                  <span className="text-[12px] text-gray-500 uppercase tracking-wide">Orders</span>
+                  <ShoppingCart size={18} className="text-[var(--crimson)]" />
                 </div>
-                <p className="font-[var(--font-serif)] text-3xl text-[var(--charcoal)]">{orders.length}</p>
-                <p className="text-[12px] text-yellow-600 mt-2">{pendingOrders} pending</p>
+                <p className="font-[var(--font-serif)] text-2xl text-[var(--charcoal)]">{orders.length}</p>
+                <p className="text-[11px] text-blue-600 mt-1">{orderedOrders} pending</p>
               </div>
               <div className="bg-white p-6 border border-gray-200">
                 <div className="flex items-center justify-between mb-4">
-                  <span className="text-[13px] text-gray-500 uppercase tracking-wide">Total Users</span>
-                  <Users size={20} className="text-[var(--crimson)]" />
+                  <span className="text-[12px] text-gray-500 uppercase tracking-wide">Users</span>
+                  <Users size={18} className="text-[var(--crimson)]" />
                 </div>
-                <p className="font-[var(--font-serif)] text-3xl text-[var(--charcoal)]">{totalUsers}</p>
+                <p className="font-[var(--font-serif)] text-2xl text-[var(--charcoal)]">{totalUsers}</p>
+                <p className="text-[11px] text-green-600 mt-1">{frequentUsers.length} frequent</p>
               </div>
               <div className="bg-white p-6 border border-gray-200">
                 <div className="flex items-center justify-between mb-4">
-                  <span className="text-[13px] text-gray-500 uppercase tracking-wide">Products</span>
-                  <Package size={20} className="text-[var(--crimson)]" />
+                  <span className="text-[12px] text-gray-500 uppercase tracking-wide">Products</span>
+                  <Package size={18} className="text-[var(--crimson)]" />
                 </div>
-                <p className="font-[var(--font-serif)] text-3xl text-[var(--charcoal)]">{totalProducts}</p>
+                <p className="font-[var(--font-serif)] text-2xl text-[var(--charcoal)]">{totalProducts}</p>
+              </div>
+              <div className="bg-white p-6 border border-gray-200">
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-[12px] text-gray-500 uppercase tracking-wide">Returns</span>
+                  <RotateCcw size={18} className="text-[var(--crimson)]" />
+                </div>
+                <p className="font-[var(--font-serif)] text-2xl text-[var(--charcoal)]">{returnStats.totalReturns}</p>
+                <p className="text-[11px] text-orange-600 mt-1">{returnStats.approvedReturns} approved</p>
               </div>
             </div>
 
@@ -412,54 +417,34 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                 <h2 className="font-[var(--font-serif)] text-[18px] text-[var(--charcoal)]">Recent Orders</h2>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full text-[13px]">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Order ID</th>
-                      <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Customer</th>
-                      <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Total</th>
-                      <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Status</th>
-                      <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Date</th>
+                      <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Order</th>
+                      <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Customer</th>
+                      <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Total</th>
+                      <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Status</th>
+                      <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Date</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
                     {orders.slice(0, 5).map((order) => (
                       <tr key={order.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 text-[14px] font-medium">{order.id}</td>
-                        <td className="px-6 py-4 text-[14px] text-gray-600">{getUserById(order.userId)?.name || 'Unknown'}</td>
-                        <td className="px-6 py-4 text-[14px]">£{order.total.toFixed(2)}</td>
+                        <td className="px-6 py-4 font-medium">{order.id}</td>
+                        <td className="px-6 py-4 text-gray-600">{getUserById(order.userId)?.name || 'Unknown'}</td>
+                        <td className="px-6 py-4">₹{order.total.toLocaleString()}</td>
                         <td className="px-6 py-4">
-                          <span className={`inline-flex items-center gap-1 px-2 py-1 text-[12px] font-medium rounded ${getStatusColor(order.status)}`}>
+                          <span className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded ${getStatusColor(order.status)}`}>
                             {getStatusIcon(order.status)} {order.status}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-[14px] text-gray-600">{new Date(order.createdAt).toLocaleDateString()}</td>
+                        <td className="px-6 py-4 text-gray-600">{new Date(order.createdAt).toLocaleDateString()}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             </div>
-
-            {cartItems.length > 0 && (
-              <div className="bg-white border border-gray-200">
-                <div className="p-6 border-b border-gray-200">
-                  <h2 className="font-[var(--font-serif)] text-[18px] text-[var(--charcoal)]">Current Cart ({cartItems.length} items)</h2>
-                </div>
-                <div className="p-6 space-y-4">
-                  {cartItems.map((item) => (
-                    <div key={item.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded">
-                      <ImageWithFallback src={item.image} alt={item.name} className="w-16 h-16 object-cover" />
-                      <div className="flex-1">
-                        <p className="text-[14px] font-medium">{item.name}</p>
-                        <p className="text-[13px] text-gray-500">Size: {item.selectedSize} · Qty: {item.quantity}</p>
-                      </div>
-                      <p className="text-[14px] font-medium text-[var(--crimson)]">£{(item.price * item.quantity).toFixed(2)}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -468,30 +453,20 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
           <div className="bg-white border border-gray-200">
             <div className="p-6 border-b border-gray-200 flex items-center justify-between">
               <h2 className="font-[var(--font-serif)] text-[18px] text-[var(--charcoal)]">All Users ({filteredUsers.length})</h2>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    // Refetch users from Supabase
-                    window.location.reload();
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-800 text-[13px] hover:bg-gray-300 rounded"
-                >
-                  Refresh
-                </button>
-                <button onClick={handleAddUser} className="flex items-center gap-2 px-4 py-2 bg-[var(--crimson)] text-white text-[13px] hover:opacity-90">
-                  <Plus size={16} /> Add User
-                </button>
-              </div>
+              <button onClick={handleAddUser} className="flex items-center gap-2 px-4 py-2 bg-[var(--crimson)] text-white text-[13px] hover:opacity-90">
+                <Plus size={16} /> Add User
+              </button>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full text-[13px]">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">User</th>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Email</th>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Orders</th>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Spent</th>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Actions</th>
+                    <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">User</th>
+                    <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Email</th>
+                    <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Orders</th>
+                    <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Spent</th>
+                    <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Joined</th>
+                    <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
@@ -502,22 +477,23 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                       <tr key={user.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-[var(--crimson)] flex items-center justify-center text-white text-[14px] font-medium">
+                            <div className="w-8 h-8 rounded-full bg-[var(--crimson)] flex items-center justify-center text-white text-[11px] font-medium">
                               {user.name.split(' ').map(n => n[0]).join('')}
                             </div>
-                            <span className="text-[14px] font-medium">{user.name}</span>
+                            <span className="font-medium">{user.name}</span>
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-[14px] text-gray-600">{user.email}</td>
-                        <td className="px-6 py-4 text-[14px]">{userOrders.length}</td>
-                        <td className="px-6 py-4 text-[14px]">£{totalSpent.toFixed(2)}</td>
+                        <td className="px-6 py-4 text-gray-600">{user.email}</td>
+                        <td className="px-6 py-4">{userOrders.length}</td>
+                        <td className="px-6 py-4">₹{totalSpent.toLocaleString()}</td>
+                        <td className="px-6 py-4 text-gray-600">{user.joinedDate}</td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-1">
                             <button onClick={() => handleEditUser(user)} className="p-2 text-gray-400 hover:text-green-600" title="Edit">
-                              <Edit2 size={18} />
+                              <Edit2 size={16} />
                             </button>
                             <button onClick={() => handleDeleteUser(user.id)} className="p-2 text-gray-400 hover:text-red-600" title="Delete">
-                              <Trash2 size={18} />
+                              <Trash2 size={16} />
                             </button>
                           </div>
                         </td>
@@ -537,46 +513,46 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
               <h2 className="font-[var(--font-serif)] text-[18px] text-[var(--charcoal)]">All Orders ({filteredOrders.length})</h2>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full text-[13px]">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Order ID</th>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Customer</th>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Items</th>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Total</th>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Status</th>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Date</th>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Actions</th>
+                    <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Order ID</th>
+                    <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Customer</th>
+                    <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Items</th>
+                    <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Total</th>
+                    <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Status</th>
+                    <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Date</th>
+                    <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {filteredOrders.map((order) => (
                     <tr key={order.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 text-[14px] font-medium">{order.id}</td>
-                      <td className="px-6 py-4 text-[14px] text-gray-600">{getUserById(order.userId)?.name || 'Unknown'}</td>
-                      <td className="px-6 py-4 text-[14px]">{order.items.length} items</td>
-                      <td className="px-6 py-4 text-[14px]">£{order.total.toFixed(2)}</td>
+                      <td className="px-6 py-4 font-medium">{order.id}</td>
+                      <td className="px-6 py-4 text-gray-600">{getUserById(order.userId)?.name || 'Unknown'}</td>
+                      <td className="px-6 py-4">{order.items.length}</td>
+                      <td className="px-6 py-4">₹{order.total.toLocaleString()}</td>
                       <td className="px-6 py-4">
                         <select
                           value={order.status}
                           onChange={(e) => updateOrderStatus(order.id, e.target.value as Order['status'])}
-                          className={`px-2 py-1 text-[12px] font-medium rounded border-0 cursor-pointer ${getStatusColor(order.status)}`}
+                          className={`px-2 py-1 text-[11px] font-medium rounded border-0 cursor-pointer ${getStatusColor(order.status)}`}
                         >
-                          <option value="pending">Pending</option>
-                          <option value="processing">Processing</option>
-                          <option value="shipped">Shipped</option>
+                          <option value="ordered">Ordered</option>
+                          <option value="acknowledged">Acknowledged</option>
+                          <option value="shipping">Shipping</option>
                           <option value="delivered">Delivered</option>
                           <option value="cancelled">Cancelled</option>
                         </select>
                       </td>
-                      <td className="px-6 py-4 text-[14px] text-gray-600">{new Date(order.createdAt).toLocaleDateString()}</td>
+                      <td className="px-6 py-4 text-gray-600">{new Date(order.createdAt).toLocaleDateString()}</td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-1">
-                          <button onClick={() => setSelectedOrder(order)} className="p-2 text-gray-400 hover:text-blue-600" title="View Details">
-                            <Eye size={18} />
+                          <button onClick={() => setSelectedOrder(order)} className="p-2 text-gray-400 hover:text-blue-600">
+                            <Eye size={16} />
                           </button>
-                          <button onClick={() => handleDeleteOrder(order.id)} className="p-2 text-gray-400 hover:text-red-600" title="Delete">
-                            <Trash2 size={18} />
+                          <button onClick={() => handleDeleteOrder(order.id)} className="p-2 text-gray-400 hover:text-red-600">
+                            <Trash2 size={16} />
                           </button>
                         </div>
                       </td>
@@ -585,70 +561,46 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                 </tbody>
               </table>
             </div>
-            
+
             {/* Order Details Modal */}
             {selectedOrder && (
               <Modal isOpen={!!selectedOrder} onClose={() => setSelectedOrder(null)} title={`Order ${selectedOrder.id}`}>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center pb-4 border-b border-gray-200">
+                <div className="space-y-4 text-[13px]">
+                  <div className="grid grid-cols-2 gap-4 pb-4 border-b border-gray-200">
                     <div>
-                      <p className="text-[14px] text-gray-500">Customer</p>
-                      <p className="text-[16px] font-medium">{getUserById(selectedOrder.userId)?.name || 'Unknown'}</p>
+                      <p className="text-gray-500 mb-1">Customer</p>
+                      <p className="font-medium">{getUserById(selectedOrder.userId)?.name}</p>
                     </div>
-                    <div className="text-right">
-                      <p className="text-[14px] text-gray-500">Date</p>
-                      <p className="text-[14px]">{new Date(selectedOrder.createdAt).toLocaleDateString()}</p>
+                    <div>
+                      <p className="text-gray-500 mb-1">Date</p>
+                      <p>{new Date(selectedOrder.createdAt).toLocaleDateString()}</p>
                     </div>
                   </div>
                   
                   <div>
-                    <p className="text-[14px] font-medium mb-3">Order Items</p>
+                    <p className="font-medium mb-2">Items</p>
                     <div className="space-y-2">
                       {selectedOrder.items.map((item, idx) => (
-                        <div key={idx} className="flex justify-between items-center p-3 bg-gray-50 rounded">
+                        <div key={idx} className="flex justify-between p-2 bg-gray-50 rounded text-[12px]">
                           <div>
-                            <p className="text-[14px] font-medium">{item.name}</p>
-                            <p className="text-[12px] text-gray-500">Size: {item.size} · Qty: {item.quantity}</p>
+                            <p className="font-medium">{item.name}</p>
+                            <p className="text-gray-500">Size: {item.selectedSize} × {item.quantity}</p>
                           </div>
-                          <p className="text-[14px]">£{(item.price * item.quantity).toFixed(2)}</p>
+                          <p>₹{(item.price * item.quantity).toLocaleString()}</p>
                         </div>
                       ))}
                     </div>
                   </div>
+
+                  {selectedOrder.packaging && (
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded">
+                      <p className="text-[12px] text-blue-800"><strong>Packaging:</strong> {selectedOrder.packaging.label} (+₹{selectedOrder.packaging.price})</p>
+                    </div>
+                  )}
                   
-                  <div className="flex justify-between items-center pt-4 border-t border-gray-200">
-                    <p className="text-[16px] font-medium">Total</p>
-                    <p className="text-[18px] font-medium text-[var(--crimson)]">£{selectedOrder.total.toFixed(2)}</p>
-                  </div>
-                  
-                  <div className="pt-4">
-                    <p className="text-[14px] font-medium mb-2">Update Status</p>
-                    <select
-                      value={selectedOrder.status}
-                      onChange={(e) => {
-                        updateOrderStatus(selectedOrder.id, e.target.value as Order['status']);
-                        setSelectedOrder({ ...selectedOrder, status: e.target.value as Order['status'] });
-                      }}
-                      className={`w-full px-3 py-2 text-[14px] font-medium rounded border border-gray-200 ${getStatusColor(selectedOrder.status)}`}
-                    >
-                      <option value="pending">Pending</option>
-                      <option value="processing">Processing</option>
-                      <option value="shipped">Shipped</option>
-                      <option value="delivered">Delivered</option>
-                      <option value="cancelled">Cancelled</option>
-                    </select>
-                  </div>
-                  
-                  <div className="flex gap-3 pt-4">
-                    <button onClick={() => setSelectedOrder(null)} className="flex-1 h-10 border border-gray-200 text-[14px] text-gray-600 hover:bg-gray-50">
-                      Close
-                    </button>
-                    <button
-                      onClick={() => { handleDeleteOrder(selectedOrder.id); setSelectedOrder(null); }}
-                      className="flex-1 h-10 bg-red-600 text-white text-[14px] hover:bg-red-700 flex items-center justify-center gap-2"
-                    >
-                      <Trash2 size={16} /> Delete Order
-                    </button>
+                  <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+                    <p className="font-medium">Total</p>
+                    <p className="text-[15px] font-medium text-[var(--crimson)]">₹{selectedOrder.total.toLocaleString()}</p>
                   </div>
                 </div>
               </Modal>
@@ -661,7 +613,7 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
           <div className="bg-white border border-gray-200">
             <div className="p-6 border-b border-gray-200">
               <h2 className="font-[var(--font-serif)] text-[18px] text-[var(--charcoal)]">Manage Categories</h2>
-              <p className="text-gray-500 text-sm mt-1">Add or remove product categories</p>
+              <p className="text-gray-500 text-[12px] mt-1">Add or remove product categories</p>
             </div>
             <div className="p-6">
               <div className="flex gap-3 mb-6">
@@ -678,30 +630,22 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                   disabled={!newCategory.trim() || categories.includes(newCategory.trim())}
                   className="flex items-center gap-2 px-4 py-2 bg-[var(--crimson)] text-white text-[13px] hover:opacity-90 disabled:opacity-50"
                 >
-                  <Plus size={16} /> Add Category
+                  <Plus size={16} /> Add
                 </button>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                 {categories.map(cat => (
-                  <div key={cat} className="flex items-center justify-between bg-gray-50 border border-gray-200 px-4 py-3 rounded">
-                    <span className="text-[14px] text-[var(--charcoal)]">{cat}</span>
+                  <div key={cat} className="flex items-center justify-between bg-gray-50 border border-gray-200 px-3 py-2 rounded text-[13px]">
+                    <span>{cat}</span>
                     <button 
                       onClick={() => handleDeleteCategory(cat)} 
-                      className="text-red-500 hover:text-red-700 p-1"
-                      title="Delete category"
+                      className="text-red-500 hover:text-red-700"
                     >
-                      <Trash2 size={16} />
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 ))}
               </div>
-              {categories.length === 0 && (
-                <div className="text-center py-12 text-gray-500">
-                  <Package size={48} className="mx-auto mb-4 opacity-50" />
-                  <p>No categories yet</p>
-                  <p className="text-sm">Add your first category above</p>
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -709,451 +653,315 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
         {/* Products Tab */}
         {activeTab === 'products' && (
           <div className="bg-white border border-gray-200">
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex items-center justify-between mb-0">
-                <h2 className="font-[var(--font-serif)] text-[18px] text-[var(--charcoal)]">All Products ({filteredProducts.length})</h2>
-                <div className="flex gap-3">
-                  <button onClick={handleDeleteAllProducts} className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-[13px] hover:bg-red-700 whitespace-nowrap flex-shrink-0">
-                    <Trash2 size={16} /> Delete All
-                  </button>
-                  <button onClick={handleAddProduct} className="flex items-center gap-2 px-4 py-2 bg-[var(--crimson)] text-white text-[13px] hover:opacity-90 whitespace-nowrap flex-shrink-0">
-                    <Plus size={16} /> Add Product
-                  </button>
-                </div>
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="font-[var(--font-serif)] text-[18px] text-[var(--charcoal)]">All Products ({filteredProducts.length})</h2>
+              <div className="flex gap-2">
+                <button onClick={handleAddProduct} className="flex items-center gap-2 px-4 py-2 bg-[var(--crimson)] text-white text-[13px] hover:opacity-90">
+                  <Plus size={16} /> Add Product
+                </button>
+                <button onClick={handleDeleteAllProducts} className="px-4 py-2 bg-red-600 text-white text-[13px] hover:opacity-90">
+                  Delete All
+                </button>
               </div>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full text-[13px]">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Product</th>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Category</th>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Gender</th>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Fabric</th>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Fit</th>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Price</th>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Offer %</th>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Essential</th>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Actions</th>
+                    <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Product</th>
+                    <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Category</th>
+                    <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Price (₹)</th>
+                    <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Stock</th>
+                    <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {filteredProducts.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} className="px-6 py-12 text-center text-gray-500">
-                        <p className="text-[14px] font-medium mb-2">No products available</p>
-                        <p className="text-[13px]">Click "Add Product" to create your first product</p>
+                  {filteredProducts.map((product) => (
+                    <tr key={product.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <ImageWithFallback src={product.image} alt={product.name} className="w-10 h-10 object-cover" />
+                          <span className="font-medium">{product.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">{product.category}</td>
+                      <td className="px-6 py-4">₹{product.price.toLocaleString()}</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 rounded text-[11px] ${product.stock > 10 ? 'bg-green-100 text-green-800' : product.stock > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>
+                          {product.stock}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex gap-1">
+                          <button onClick={() => handleEditProduct(product)} className="p-2 text-gray-400 hover:text-green-600">
+                            <Edit2 size={14} />
+                          </button>
+                          <button onClick={() => handleDeleteProduct(product.id)} className="p-2 text-gray-400 hover:text-red-600">
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
-                  ) : (
-                    filteredProducts.map((product) => (
-                      <tr key={product.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            <ImageWithFallback src={product.image} alt={product.name} className="w-12 h-12 object-cover" />
-                            <span className="text-[14px] font-medium">{product.name}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-[14px] text-gray-600">{product.category || '-'}</td>
-                        <td className="px-6 py-4 text-[14px] text-gray-600">{product.gender || '-'}</td>
-                        <td className="px-6 py-4 text-[14px] text-gray-600">{product.fabric}</td>
-                        <td className="px-6 py-4 text-[14px] text-gray-600">{product.fit}</td>
-                        <td className="px-6 py-4 text-[14px] text-[var(--crimson)] font-medium">₹{product.price}</td>
-                        <td className="px-6 py-4 text-[14px] text-gray-600">{product.offerPercentage ? `${product.offerPercentage}%` : '-'}</td>
-                        <td className="px-6 py-4 text-[14px]">{product.isEssential ? '✓' : '-'}</td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => handleEditProduct(product)} className="p-2 text-gray-400 hover:text-green-600" title="Edit">
-                              <Edit2 size={18} />
-                            </button>
-                            <button onClick={() => handleDeleteProduct(product.id)} className="p-2 text-gray-400 hover:text-red-600" title="Delete">
-                              <Trash2 size={18} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                  ))}
                 </tbody>
               </table>
             </div>
+
+            {/* Product Modal */}
+            <Modal isOpen={showProductModal} onClose={() => setShowProductModal(false)} title={editingProduct ? 'Edit Product' : 'Add Product'}>
+              <div className="space-y-4 text-[13px]">
+                <input
+                  type="text"
+                  placeholder="Product Name"
+                  value={productForm.name}
+                  onChange={(e) => setProductForm({...productForm, name: e.target.value})}
+                  className="w-full h-9 px-3 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)]"
+                />
+                <div className="grid grid-cols-2 gap-3">
+                  <input
+                    type="number"
+                    placeholder="Price (₹)"
+                    value={productForm.price}
+                    onChange={(e) => setProductForm({...productForm, price: e.target.value})}
+                    className="h-9 px-3 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)]"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Stock Qty"
+                    value={productForm.stock}
+                    onChange={(e) => setProductForm({...productForm, stock: e.target.value})}
+                    className="h-9 px-3 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)]"
+                  />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Image URL"
+                  value={productForm.image}
+                  onChange={(e) => setProductForm({...productForm, image: e.target.value})}
+                  className="w-full h-9 px-3 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)]"
+                />
+                <div className="grid grid-cols-2 gap-3">
+                  <input type="text" placeholder="Fabric" value={productForm.fabric} onChange={(e) => setProductForm({...productForm, fabric: e.target.value})} className="h-9 px-3 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)]" />
+                  <input type="text" placeholder="Fit" value={productForm.fit} onChange={(e) => setProductForm({...productForm, fit: e.target.value})} className="h-9 px-3 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)]" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <select value={productForm.category} onChange={(e) => setProductForm({...productForm, category: e.target.value})} className="h-9 px-3 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)]">
+                    <option value="">Select Category</option>
+                    {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                  </select>
+                  <select value={productForm.gender} onChange={(e) => setProductForm({...productForm, gender: e.target.value})} className="h-9 px-3 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)]">
+                    <option value="">Gender</option>
+                    <option value="Men">Men</option>
+                    <option value="Women">Women</option>
+                    <option value="Unisex">Unisex</option>
+                  </select>
+                </div>
+                <button onClick={handleSaveProduct} className="w-full h-9 bg-[var(--crimson)] text-white text-[13px] hover:opacity-90 flex items-center justify-center gap-2">
+                  <Save size={16} /> Save Product
+                </button>
+              </div>
+            </Modal>
           </div>
         )}
 
-        {/* Fit Profiles Tab */}
-        {activeTab === 'fit-profiles' && (
+        {/* Stock Tab */}
+        {activeTab === 'stock' && (
           <div className="bg-white border border-gray-200">
             <div className="p-6 border-b border-gray-200">
-              <h2 className="font-[var(--font-serif)] text-[18px] text-[var(--charcoal)]">Fit Profiles ({fitProfiles.length})</h2>
-              <p className="text-[13px] text-gray-500 mt-1">User size preferences and body type information</p>
+              <h2 className="font-[var(--font-serif)] text-[18px] text-[var(--charcoal)]">Stock Management</h2>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-[14px]">
+              <table className="w-full text-[13px]">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">User</th>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Size</th>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Body Type</th>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Height</th>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Weight</th>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Preferred Fit</th>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Created</th>
-                    <th className="px-6 py-3 text-left text-[12px] font-medium text-gray-500 uppercase">Actions</th>
+                    <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Product</th>
+                    <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Stock</th>
+                    <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {fitProfiles.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
-                        No fit profiles yet. Users can create their profiles to help find the perfect fit.
+                  {products.map((product) => (
+                    <tr key={product.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 font-medium">{product.name}</td>
+                      <td className="px-6 py-4">{product.stock} units</td>
+                      <td className="px-6 py-4">
+                        {product.stock > 20 && <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-[11px]">Good Stock</span>}
+                        {product.stock <= 20 && product.stock > 0 && <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-[11px]">Low Stock</span>}
+                        {product.stock === 0 && <span className="px-2 py-1 bg-red-100 text-red-800 rounded text-[11px]">Out of Stock</span>}
                       </td>
                     </tr>
-                  ) : (
-                    fitProfiles.map((profile: any) => {
-                      const user = getUserById(profile.userId);
-                      // Use bodyType directly from profile
-                      const bodyType = profile.bodyType || '-';
-
-                      // Show user if found, otherwise show userId
-                      const displayName = user?.name || 'User';
-                      const displayEmail = user?.email || profile.userId;
-                      const userInitials = user?.name
-                        ? user.name.split(' ').map((n: string) => n[0]).join('')
-                        : profile.userId.substring(0, 2).toUpperCase();
-
-                      return (
-                        <tr key={profile.userId} className="hover:bg-gray-50">
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-full bg-[var(--crimson)] flex items-center justify-center text-white text-[14px] font-medium">
-                                {userInitials}
-                              </div>
-                              <div>
-                                <p className="text-[14px] font-medium">{displayName}</p>
-                                <p className="text-[12px] text-gray-500">{displayEmail}</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="px-3 py-1 text-[14px] font-bold rounded bg-[var(--crimson)] text-white">{profile.preferredSize || '-'}</span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="px-2 py-1 text-[12px] font-medium rounded bg-blue-100 text-blue-800 capitalize">{bodyType}</span>
-                          </td>
-                          <td className="px-6 py-4 text-gray-600">{profile.height ? `${profile.height} cm` : '-'}</td>
-                          <td className="px-6 py-4 text-gray-600">{profile.weight ? `${profile.weight} kg` : '-'}</td>
-                          <td className="px-6 py-4">
-                            <span className="px-2 py-1 text-[12px] font-medium rounded bg-gray-100 capitalize">{profile.preferredFit || '-'}</span>
-                          </td>
-                          <td className="px-6 py-4 text-gray-500 text-[12px]">
-                            {profile.createdAt ? new Date(profile.createdAt).toLocaleDateString() : '-'}
-                          </td>
-                          <td className="px-6 py-4">
-                            <button 
-                              onClick={() => handleDeleteFitProfile(profile.userId)} 
-                              className="p-2 text-gray-400 hover:text-red-600 transition-colors" 
-                              title="Delete profile"
-                            >
-                              <Trash2 size={18} />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
+                  ))}
                 </tbody>
               </table>
             </div>
           </div>
         )}
-      </div>
 
-      {/* Product Modal */}
-      <Modal isOpen={showProductModal} onClose={() => setShowProductModal(false)} title={editingProduct ? 'Edit Product' : 'Add New Product'}>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-[14px] text-[var(--charcoal)] mb-2">Product Name *</label>
-            <input
-              type="text"
-              value={productForm.name}
-              onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
-              className="w-full h-10 px-3 border border-gray-200 text-[14px] focus:outline-none focus:border-[var(--crimson)]"
-              placeholder="e.g., Cashmere Sweater"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-[14px] text-[var(--charcoal)] mb-2">Price (₹) *</label>
-              <input
-                type="number"
-                value={productForm.price}
-                onChange={(e) => setProductForm({ ...productForm, price: e.target.value })}
-                className="w-full h-10 px-3 border border-gray-200 text-[14px] focus:outline-none focus:border-[var(--crimson)]"
-                placeholder="295"
-              />
+        {/* Packaging Tab */}
+        {activeTab === 'packaging' && (
+          <div className="bg-white border border-gray-200">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="font-[var(--font-serif)] text-[18px] text-[var(--charcoal)]">Packaging Options</h2>
             </div>
-            <div>
-              <label className="block text-[14px] text-[var(--charcoal)] mb-2">Category</label>
-              <select
-                value={productForm.category}
-                onChange={(e) => setProductForm({ ...productForm, category: e.target.value })}
-                className="w-full h-10 px-3 border border-gray-200 text-[14px] focus:outline-none focus:border-[var(--crimson)]"
-              >
-                <option value="">Select category</option>
-                {categories.map((cat) => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+              {packagingOptions.map((option) => (
+                <div key={option.id} className="border border-gray-200 p-4 rounded">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <p className="font-medium text-[14px]">{option.label}</p>
+                      <p className="text-[12px] text-gray-500">{option.description}</p>
+                    </div>
+                    <p className="text-[16px] font-medium text-[var(--crimson)]">₹{option.price}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button className="flex-1 px-3 py-2 border border-gray-200 text-[12px] hover:bg-gray-50">Edit</button>
+                    <button className="flex-1 px-3 py-2 border border-red-200 text-red-600 text-[12px] hover:bg-red-50">Delete</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Returns Tab */}
+        {activeTab === 'returns' && (
+          <div className="bg-white border border-gray-200">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="font-[var(--font-serif)] text-[18px] text-[var(--charcoal)]">Return Requests ({returns.length})</h2>
+            </div>
+            {returns.length === 0 ? (
+              <div className="p-12 text-center text-gray-500">
+                <Package size={40} className="mx-auto mb-3 opacity-50" />
+                <p>No return requests yet</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-[13px]">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Return ID</th>
+                      <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Order</th>
+                      <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Reason</th>
+                      <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Status</th>
+                      <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {returns.map((ret) => (
+                      <tr key={ret.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 font-medium">{ret.id}</td>
+                        <td className="px-6 py-4">{ret.orderId}</td>
+                        <td className="px-6 py-4">{ret.reason}</td>
+                        <td className="px-6 py-4">
+                          <span className={`px-2 py-1 rounded text-[11px] font-medium ${
+                            ret.status === 'approved' ? 'bg-green-100 text-green-800' :
+                            ret.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                            ret.status === 'completed' ? 'bg-blue-100 text-blue-800' :
+                            'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {ret.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">{ret.requestedDate}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Navigation Menu Tab */}
+        {activeTab === 'navigation' && (
+          <div className="bg-white border border-gray-200">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="font-[var(--font-serif)] text-[18px] text-[var(--charcoal)]">Website Navigation Menu</h2>
+              <p className="text-gray-500 text-[12px] mt-1">Manage menu items and sections</p>
+            </div>
+            <div className="p-6 space-y-3">
+              {navigationMenu.map((item) => (
+                <div key={item.id} className="flex items-center justify-between bg-gray-50 border border-gray-200 p-4 rounded">
+                  <div className="flex items-center gap-3">
+                    <input type="checkbox" checked={item.isActive} onChange={() => updateNavMenuItem(item.id, { isActive: !item.isActive })} />
+                    <div>
+                      <p className="font-medium text-[13px]">{item.label}</p>
+                      <p className="text-[11px] text-gray-500">{item.path}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => deleteNavMenuItem(item.id)} className="p-2 text-gray-400 hover:text-red-600">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Analytics Tab */}
+        {activeTab === 'analytics' && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-white p-6 border border-gray-200">
+                <p className="text-gray-500 text-[12px] uppercase mb-2">Total Revenue</p>
+                <p className="font-[var(--font-serif)] text-3xl text-[var(--crimson)]">₹{totalRevenue.toLocaleString()}</p>
+              </div>
+              <div className="bg-white p-6 border border-gray-200">
+                <p className="text-gray-500 text-[12px] uppercase mb-2">Avg Order Value</p>
+                <p className="font-[var(--font-serif)] text-3xl">₹{orders.length > 0 ? (totalRevenue / orders.length).toLocaleString(undefined, {maximumFractionDigits: 0}) : 0}</p>
+              </div>
+              <div className="bg-white p-6 border border-gray-200">
+                <p className="text-gray-500 text-[12px] uppercase mb-2">Return Rate</p>
+                <p className="font-[var(--font-serif)] text-3xl">{returnStats.returnRate.toFixed(1)}%</p>
+              </div>
             </div>
 
-          </div>
-          <div>
-            <label className="block text-[14px] text-[var(--charcoal)] mb-2">Image URL</label>
-            <input
-              type="text"
-              value={productForm.image}
-              onChange={(e) => setProductForm({ ...productForm, image: e.target.value })}
-              className="w-full h-10 px-3 border border-gray-200 text-[14px] focus:outline-none focus:border-[var(--crimson)]"
-              placeholder="https://images.unsplash.com/..."
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-[14px] text-[var(--charcoal)] mb-2">Fabric *</label>
-              <select
-                value={productForm.fabric}
-                onChange={(e) => setProductForm({ ...productForm, fabric: e.target.value })}
-                className="w-full h-10 px-3 border border-gray-200 text-[14px] focus:outline-none focus:border-[var(--crimson)]"
-              >
-                <option value="">Select fabric</option>
-                <option value="Cotton">Cotton</option>
-                <option value="Wool">Wool</option>
-                <option value="Silk">Silk</option>
-                <option value="Linen">Linen</option>
-                <option value="Cashmere">Cashmere</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-[14px] text-[var(--charcoal)] mb-2">Fit *</label>
-              <select
-                value={productForm.fit}
-                onChange={(e) => setProductForm({ ...productForm, fit: e.target.value })}
-                className="w-full h-10 px-3 border border-gray-200 text-[14px] focus:outline-none focus:border-[var(--crimson)]"
-              >
-                <option value="">Select fit</option>
-                <option value="Slim Fit">Slim Fit</option>
-                <option value="Regular Fit">Regular Fit</option>
-                <option value="Relaxed Fit">Relaxed Fit</option>
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className="block text-[14px] text-[var(--charcoal)] mb-2">Sizes (comma separated)</label>
-            <input
-              type="text"
-              value={productForm.size}
-              onChange={(e) => setProductForm({ ...productForm, size: e.target.value })}
-              className="w-full h-10 px-3 border border-gray-200 text-[14px] focus:outline-none focus:border-[var(--crimson)]"
-              placeholder="S, M, L, XL"
-            />
-          </div>
-          <div>
-            <label className="block text-[14px] text-[var(--charcoal)] mb-2">Gender</label>
-            <select
-              value={productForm.gender}
-              onChange={(e) => setProductForm({ ...productForm, gender: e.target.value })}
-              className="w-full h-10 px-3 border border-gray-200 text-[14px] focus:outline-none focus:border-[var(--crimson)]"
-            >
-              <option value="">Select gender</option>
-              <option value="Men">Men</option>
-              <option value="Women">Women</option>
-              <option value="Unisex">Unisex</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              id="isEssential"
-              checked={productForm.isEssential}
-              onChange={(e) => setProductForm({ ...productForm, isEssential: e.target.checked })}
-              className="w-4 h-4"
-            />
-            <label htmlFor="isEssential" className="text-[14px] text-[var(--charcoal)] cursor-pointer">
-              Mark as Essential
-            </label>
-          </div>
-          <div className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              id="isHighlight"
-              checked={productForm.isHighlight}
-              onChange={(e) => setProductForm({ ...productForm, isHighlight: e.target.checked })}
-              className="w-4 h-4"
-            />
-            <label htmlFor="isHighlight" className="text-[14px] text-[var(--charcoal)] cursor-pointer">
-              Show in Highlight (Men & Women Collections)
-            </label>
-          </div>
-          <div className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              id="isTop"
-              checked={productForm.isTop}
-              onChange={(e) => setProductForm({ ...productForm, isTop: e.target.checked })}
-              className="w-4 h-4"
-            />
-            <label htmlFor="isTop" className="text-[14px] text-[var(--charcoal)] cursor-pointer">
-              Top (Enable Curate Your Fit - Chest, Shoulder, etc.)
-            </label>
-          </div>
-          <div className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              id="isBottom"
-              checked={productForm.isBottom}
-              onChange={(e) => setProductForm({ ...productForm, isBottom: e.target.checked })}
-              className="w-4 h-4"
-            />
-            <label htmlFor="isBottom" className="text-[14px] text-[var(--charcoal)] cursor-pointer">
-              Bottom (Enable Curate Your Fit - Waist, Thigh, Inseam, etc.)
-            </label>
-          </div>
-          <div>
-            <label className="block text-[14px] text-[var(--charcoal)] mb-2">Season</label>
-            <select
-              value={productForm.season}
-              onChange={(e) => setProductForm({ ...productForm, season: e.target.value })}
-              className="w-full h-10 px-3 border border-gray-200 text-[14px] focus:outline-none focus:border-[var(--crimson)]"
-            >
-              <option value="">Select season</option>
-              <option value="Summer">Summer</option>
-              <option value="Winter">Winter</option>
-              <option value="Spring">Spring</option>
-              <option value="Autumn">Autumn</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-[14px] text-[var(--charcoal)] mb-2">Festival</label>
-            <select
-              value={productForm.festival}
-              onChange={(e) => setProductForm({ ...productForm, festival: e.target.value })}
-              className="w-full h-10 px-3 border border-gray-200 text-[14px] focus:outline-none focus:border-[var(--crimson)]"
-            >
-              <option value="">Select festival</option>
-              <option value="Diwali">Diwali</option>
-              <option value="Holi">Holi</option>
-              <option value="Eid">Eid</option>
-              <option value="Christmas">Christmas</option>
-              <option value="New Year">New Year</option>
-              <option value="Pongal">Pongal</option>
-              <option value="Onam">Onam</option>
-              <option value="Durga Puja">Durga Puja</option>
-              <option value="Wedding">Wedding</option>
-              <option value="Party">Party</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-[14px] text-[var(--charcoal)] mb-2">Offer Percentage (%)</label>
-            <input
-              type="number"
-              value={productForm.offerPercentage}
-              onChange={(e) => setProductForm({ ...productForm, offerPercentage: e.target.value })}
-              className="w-full h-10 px-3 border border-gray-200 text-[14px] focus:outline-none focus:border-[var(--crimson)]"
-              placeholder="0"
-              min="0"
-              max="100"
-            />
-          </div>
-          <div className="flex gap-3 pt-4">
-            <button onClick={() => setShowProductModal(false)} className="flex-1 h-10 border border-gray-200 text-[14px] text-gray-600 hover:bg-gray-50">
-              Cancel
-            </button>
-            <button
-              onClick={handleSaveProduct}
-              disabled={!productForm.name || !productForm.price || !productForm.fabric || !productForm.fit}
-              className="flex-1 h-10 bg-[var(--crimson)] text-white text-[14px] hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              <Save size={16} /> {editingProduct ? 'Update' : 'Add'} Product
-            </button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* User Modal */}
-      <Modal isOpen={showUserModal} onClose={() => setShowUserModal(false)} title={editingUser ? 'Edit User' : 'Add New User'}>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-[14px] text-[var(--charcoal)] mb-2">Full Name *</label>
-            <input
-              type="text"
-              value={userForm.name}
-              onChange={(e) => setUserForm({ ...userForm, name: e.target.value })}
-              className="w-full h-10 px-3 border border-gray-200 text-[14px] focus:outline-none focus:border-[var(--crimson)]"
-              placeholder="John Smith"
-            />
-          </div>
-          <div>
-            <label className="block text-[14px] text-[var(--charcoal)] mb-2">Email *</label>
-            <input
-              type="email"
-              value={userForm.email}
-              onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
-              className="w-full h-10 px-3 border border-gray-200 text-[14px] focus:outline-none focus:border-[var(--crimson)]"
-              placeholder="john@example.com"
-            />
-          </div>
-          <div>
-            <label className="block text-[14px] text-[var(--charcoal)] mb-2">Phone</label>
-            <input
-              type="tel"
-              value={userForm.phone}
-              onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })}
-              className="w-full h-10 px-3 border border-gray-200 text-[14px] focus:outline-none focus:border-[var(--crimson)]"
-              placeholder="+44 7700 900000"
-            />
-          </div>
-          <div className="border-t border-gray-200 pt-4 mt-4">
-            <h4 className="text-[14px] font-medium text-[var(--charcoal)] mb-4">Address (Optional)</h4>
-            <div className="space-y-3">
-              <input
-                type="text"
-                value={userForm.street}
-                onChange={(e) => setUserForm({ ...userForm, street: e.target.value })}
-                className="w-full h-10 px-3 border border-gray-200 text-[14px] focus:outline-none focus:border-[var(--crimson)]"
-                placeholder="Street Address"
-              />
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  type="text"
-                  value={userForm.city}
-                  onChange={(e) => setUserForm({ ...userForm, city: e.target.value })}
-                  className="w-full h-10 px-3 border border-gray-200 text-[14px] focus:outline-none focus:border-[var(--crimson)]"
-                  placeholder="City"
-                />
-                <input
-                  type="text"
-                  value={userForm.postcode}
-                  onChange={(e) => setUserForm({ ...userForm, postcode: e.target.value })}
-                  className="w-full h-10 px-3 border border-gray-200 text-[14px] focus:outline-none focus:border-[var(--crimson)]"
-                  placeholder="Postcode"
-                />
+            <div className="bg-white border border-gray-200">
+              <div className="p-6 border-b border-gray-200">
+                <h2 className="font-[var(--font-serif)] text-[18px] text-[var(--charcoal)]">Frequent Customers</h2>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-[13px]">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Customer</th>
+                      <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Orders</th>
+                      <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Total Spent (₹)</th>
+                      <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Avg Order (₹)</th>
+                      <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Return Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {getUserActivity().slice(0, 10).map((analytics) => (
+                      <tr key={analytics.userId}>
+                        <td className="px-6 py-4 font-medium">{getUserById(analytics.userId)?.name}</td>
+                        <td className="px-6 py-4">{analytics.totalOrders}</td>
+                        <td className="px-6 py-4">₹{analytics.totalSpent.toLocaleString()}</td>
+                        <td className="px-6 py-4">₹{analytics.averageOrderValue.toLocaleString(undefined, {maximumFractionDigits: 0})}</td>
+                        <td className="px-6 py-4">{analytics.returnRate.toFixed(1)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
-          <div className="flex gap-3 pt-4">
-            <button onClick={() => setShowUserModal(false)} className="flex-1 h-10 border border-gray-200 text-[14px] text-gray-600 hover:bg-gray-50">
-              Cancel
-            </button>
-            <button
-              onClick={handleSaveUser}
-              disabled={!userForm.name || !userForm.email}
-              className="flex-1 h-10 bg-[var(--crimson)] text-white text-[14px] hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              <Save size={16} /> {editingUser ? 'Update' : 'Add'} User
+        )}
+
+        {/* User Modal */}
+        <Modal isOpen={showUserModal} onClose={() => setShowUserModal(false)} title={editingUser ? 'Edit User' : 'Add User'}>
+          <div className="space-y-4 text-[13px]">
+            <input type="text" placeholder="Name" value={userForm.name} onChange={(e) => setUserForm({...userForm, name: e.target.value})} className="w-full h-9 px-3 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)]" />
+            <input type="email" placeholder="Email" value={userForm.email} onChange={(e) => setUserForm({...userForm, email: e.target.value})} className="w-full h-9 px-3 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)]" />
+            <input type="tel" placeholder="Phone" value={userForm.phone} onChange={(e) => setUserForm({...userForm, phone: e.target.value})} className="w-full h-9 px-3 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)]" />
+            <button onClick={handleSaveUser} className="w-full h-9 bg-[var(--crimson)] text-white text-[13px] hover:opacity-90 flex items-center justify-center gap-2">
+              <Save size={16} /> Save User
             </button>
           </div>
-        </div>
-      </Modal>
+        </Modal>
+      </div>
     </div>
   );
 }
