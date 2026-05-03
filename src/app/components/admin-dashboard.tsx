@@ -73,8 +73,10 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
   // Modal states
   const [showProductModal, setShowProductModal] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
+  const [showPackagingModal, setShowPackagingModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editingPackaging, setEditingPackaging] = useState<PackagingOption | null>(null);
   
   // Category management state
   const [categories, setCategories] = useState<string[]>(["Shirts", "Trousers", "Knitwear", "Outerwear", "Dresses"]);
@@ -86,6 +88,9 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
   });
   const [userForm, setUserForm] = useState({
     name: '', email: '', phone: '', street: '', city: '', postcode: '', country: 'United Kingdom'
+  });
+  const [packagingForm, setPackagingForm] = useState({
+    name: '', label: '', description: '', price: '0'
   });
 
   // Category management handlers
@@ -101,6 +106,53 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
     if (productForm.category === cat) {
       setProductForm({ ...productForm, category: "" });
     }
+  };
+
+  // Packaging handlers
+  const handleAddPackaging = () => {
+    if (packagingForm.name && packagingForm.label && packagingForm.description) {
+      if (editingPackaging) {
+        updatePackagingOption(editingPackaging.id, {
+          name: packagingForm.name,
+          label: packagingForm.label,
+          description: packagingForm.description,
+          price: parseInt(packagingForm.price)
+        });
+      } else {
+        addPackagingOption({
+          name: packagingForm.name,
+          label: packagingForm.label,
+          description: packagingForm.description,
+          price: parseInt(packagingForm.price)
+        });
+      }
+      setPackagingForm({ name: '', label: '', description: '', price: '0' });
+      setEditingPackaging(null);
+      setShowPackagingModal(false);
+    }
+  };
+
+  const handleEditPackaging = (option: PackagingOption) => {
+    setEditingPackaging(option);
+    setPackagingForm({
+      name: option.name,
+      label: option.label,
+      description: option.description,
+      price: option.price.toString()
+    });
+    setShowPackagingModal(true);
+  };
+
+  const handleDeletePackaging = (id: string) => {
+    if (confirm('Are you sure you want to delete this packaging option?')) {
+      deletePackagingOption(id);
+    }
+  };
+
+  const handleClosePackagingModal = () => {
+    setShowPackagingModal(false);
+    setEditingPackaging(null);
+    setPackagingForm({ name: '', label: '', description: '', price: '0' });
   };
 
   useEffect(() => {
@@ -800,8 +852,18 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
         {/* Packaging Tab */}
         {activeTab === 'packaging' && (
           <div className="bg-white border border-gray-200">
-            <div className="p-6 border-b border-gray-200">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
               <h2 className="font-[var(--font-serif)] text-[18px] text-[var(--charcoal)]">Packaging Options</h2>
+              <button
+                onClick={() => {
+                  setEditingPackaging(null);
+                  setPackagingForm({ name: '', label: '', description: '', price: '0' });
+                  setShowPackagingModal(true);
+                }}
+                className="px-4 py-2 bg-[var(--crimson)] text-white text-[12px] rounded hover:opacity-90 flex items-center gap-2"
+              >
+                <Plus size={16} /> Add Packaging
+              </button>
             </div>
             <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
               {packagingOptions.map((option) => (
@@ -814,8 +876,18 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                     <p className="text-[16px] font-medium text-[var(--crimson)]">₹{option.price}</p>
                   </div>
                   <div className="flex gap-2">
-                    <button className="flex-1 px-3 py-2 border border-gray-200 text-[12px] hover:bg-gray-50">Edit</button>
-                    <button className="flex-1 px-3 py-2 border border-red-200 text-red-600 text-[12px] hover:bg-red-50">Delete</button>
+                    <button
+                      onClick={() => handleEditPackaging(option)}
+                      className="flex-1 px-3 py-2 border border-gray-200 text-[12px] hover:bg-gray-50 flex items-center justify-center gap-1"
+                    >
+                      <Edit2 size={14} /> Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeletePackaging(option.id)}
+                      className="flex-1 px-3 py-2 border border-red-200 text-red-600 text-[12px] hover:bg-red-50 flex items-center justify-center gap-1"
+                    >
+                      <Trash2 size={14} /> Delete
+                    </button>
                   </div>
                 </div>
               ))}
@@ -958,6 +1030,58 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
             <input type="tel" placeholder="Phone" value={userForm.phone} onChange={(e) => setUserForm({...userForm, phone: e.target.value})} className="w-full h-9 px-3 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)]" />
             <button onClick={handleSaveUser} className="w-full h-9 bg-[var(--crimson)] text-white text-[13px] hover:opacity-90 flex items-center justify-center gap-2">
               <Save size={16} /> Save User
+            </button>
+          </div>
+        </Modal>
+
+        {/* Packaging Modal */}
+        <Modal isOpen={showPackagingModal} onClose={handleClosePackagingModal} title={editingPackaging ? 'Edit Packaging' : 'Add Packaging Option'}>
+          <div className="space-y-4 text-[13px]">
+            <div>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1">Package Name</label>
+              <input
+                type="text"
+                placeholder="e.g., simple, elegant, premium, gift"
+                value={packagingForm.name}
+                onChange={(e) => setPackagingForm({...packagingForm, name: e.target.value})}
+                className="w-full h-9 px-3 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)]"
+              />
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1">Label (Display Name)</label>
+              <input
+                type="text"
+                placeholder="e.g., Simple Package"
+                value={packagingForm.label}
+                onChange={(e) => setPackagingForm({...packagingForm, label: e.target.value})}
+                className="w-full h-9 px-3 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)]"
+              />
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1">Description</label>
+              <textarea
+                placeholder="e.g., Basic packaging"
+                value={packagingForm.description}
+                onChange={(e) => setPackagingForm({...packagingForm, description: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)] text-[13px]"
+                rows={3}
+              />
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1">Price (₹)</label>
+              <input
+                type="number"
+                placeholder="0"
+                value={packagingForm.price}
+                onChange={(e) => setPackagingForm({...packagingForm, price: e.target.value})}
+                className="w-full h-9 px-3 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)]"
+              />
+            </div>
+            <button
+              onClick={handleAddPackaging}
+              className="w-full h-9 bg-[var(--crimson)] text-white text-[13px] hover:opacity-90 flex items-center justify-center gap-2"
+            >
+              <Save size={16} /> {editingPackaging ? 'Update Packaging' : 'Add Packaging'}
             </button>
           </div>
         </Modal>
