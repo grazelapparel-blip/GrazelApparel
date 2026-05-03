@@ -205,24 +205,33 @@ export async function handleAuthRedirect() {
     
     if (userCredential?.user) {
       const user = userCredential.user;
+      console.log('✅ Google OAuth redirect detected, user:', user.email);
       
-      // Create/update user document in Firestore
-      const userDocRef = doc(db, 'users', user.uid);
-      await setDoc(userDocRef, {
-        email: user.email,
-        name: user.displayName || 'User',
-        photoUrl: user.photoURL,
-        joinedDate: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }, { merge: true });
-
+      // Try to create Firestore user but don't block if it fails
+      // (security rules might not be deployed yet)
+      try {
+        const userDocRef = doc(db, 'users', user.uid);
+        await setDoc(userDocRef, {
+          email: user.email,
+          name: user.displayName || 'User',
+          photoUrl: user.photoURL,
+          joinedDate: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+        console.log('✅ User document created in Firestore');
+      } catch (firestoreError: any) {
+        console.warn('⚠️ Could not create Firestore user (rules might not be deployed):', firestoreError.message);
+        // Continue anyway - user auth is valid even if Firestore failed
+      }
+      
+      // Return user regardless of Firestore success/failure
       return { user, isRedirectAuth: true };
     }
     
     return { user: null, isRedirectAuth: false };
   } catch (error: any) {
-    console.error('Auth redirect error:', error);
+    console.error('❌ Auth redirect error:', error);
     return { user: null, isRedirectAuth: false, error };
   }
 }

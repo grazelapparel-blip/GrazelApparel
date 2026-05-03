@@ -26,20 +26,24 @@ export function UserAuth({ onSuccess }: UserAuthProps) {
   // Check for redirect from Google OAuth on component mount
   useEffect(() => {
     const checkRedirect = async () => {
-      const result = await handleAuthRedirect();
-      if (result.isRedirectAuth && result.user) {
-        const newUser = {
-          id: result.user.uid,
-          email: result.user.email || '',
-          name: result.user.displayName || 'User',
-          joinedDate: new Date().toISOString().split('T')[0]
-        };
-        setCurrentUser(newUser);
-        onSuccess();
+      try {
+        const result = await handleAuthRedirect();
+        if (result.isRedirectAuth && result.user) {
+          const newUser = {
+            id: result.user.uid,
+            email: result.user.email || '',
+            name: result.user.displayName || 'User',
+            joinedDate: new Date().toISOString().split('T')[0]
+          };
+          setCurrentUser(newUser);
+          onSuccess();
+        }
+      } catch (err: any) {
+        console.error('Error checking auth redirect:', err);
       }
     };
     checkRedirect();
-  }, [setCurrentUser, onSuccess]);
+  }, []);  // Empty dependency array - only run on mount
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
