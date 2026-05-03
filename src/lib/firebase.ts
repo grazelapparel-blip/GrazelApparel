@@ -182,18 +182,24 @@ export async function signOutUser() {
 
 export async function signInWithGoogle() {
   try {
+    console.log('🔵 signInWithGoogle() called');
     const provider = new GoogleAuthProvider();
+    console.log('✅ GoogleAuthProvider created');
+    
     // Set custom parameters for Google sign-in
     provider.setCustomParameters({
       prompt: 'select_account'
     });
+    console.log('✅ Provider configured with prompt=select_account');
     
     // Use redirect instead of popup to avoid COOP/COEP blocking issues
+    console.log('📤 About to call signInWithRedirect...');
     await signInWithRedirect(auth, provider);
+    console.log('✅ signInWithRedirect completed (this line may not execute due to redirect)');
     // Function will redirect - code after this won't execute
     return { user: null };
   } catch (error: any) {
-    console.error('Google sign-in error:', error);
+    console.error('❌ Google sign-in error:', error);
     throw new Error(error.message || 'Google sign-in failed. Please try again.');
   }
 }
@@ -201,14 +207,15 @@ export async function signInWithGoogle() {
 // Handle redirect result after Google sign-in
 export async function handleAuthRedirect() {
   try {
+    console.log('🔄 Checking for auth redirect...');
     const userCredential = await getRedirectResult(auth);
+    console.log('📋 Redirect result:', userCredential ? 'User found' : 'No redirect result');
     
     if (userCredential?.user) {
       const user = userCredential.user;
       console.log('✅ Google OAuth redirect detected, user:', user.email);
       
       // Try to create Firestore user but don't block if it fails
-      // (security rules might not be deployed yet)
       try {
         const userDocRef = doc(db, 'users', user.uid);
         await setDoc(userDocRef, {
@@ -221,14 +228,13 @@ export async function handleAuthRedirect() {
         }, { merge: true });
         console.log('✅ User document created in Firestore');
       } catch (firestoreError: any) {
-        console.warn('⚠️ Could not create Firestore user (rules might not be deployed):', firestoreError.message);
-        // Continue anyway - user auth is valid even if Firestore failed
+        console.warn('⚠️ Could not create Firestore user:', firestoreError.message);
       }
       
-      // Return user regardless of Firestore success/failure
       return { user, isRedirectAuth: true };
     }
     
+    console.log('ℹ️ No redirect auth result (this is normal if not coming from Google)');
     return { user: null, isRedirectAuth: false };
   } catch (error: any) {
     console.error('❌ Auth redirect error:', error);

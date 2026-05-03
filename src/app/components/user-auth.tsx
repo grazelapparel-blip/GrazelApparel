@@ -27,8 +27,16 @@ export function UserAuth({ onSuccess }: UserAuthProps) {
   useEffect(() => {
     const checkRedirect = async () => {
       try {
+        console.log('🔍 UserAuth mounted, checking for redirect...');
         const result = await handleAuthRedirect();
+        console.log('📊 Redirect check result:', { 
+          isRedirectAuth: result.isRedirectAuth, 
+          hasUser: !!result.user,
+          email: result.user?.email
+        });
+        
         if (result.isRedirectAuth && result.user) {
+          console.log('🎉 User logged in via Google OAuth:', result.user.email);
           const newUser = {
             id: result.user.uid,
             email: result.user.email || '',
@@ -36,10 +44,11 @@ export function UserAuth({ onSuccess }: UserAuthProps) {
             joinedDate: new Date().toISOString().split('T')[0]
           };
           setCurrentUser(newUser);
+          console.log('✅ User context updated, calling onSuccess()');
           onSuccess();
         }
       } catch (err: any) {
-        console.error('Error checking auth redirect:', err);
+        console.error('❌ Error in redirect check:', err);
       }
     };
     checkRedirect();
@@ -96,15 +105,18 @@ export function UserAuth({ onSuccess }: UserAuthProps) {
 
   // Handle Google OAuth (uses redirect flow)
   const handleGoogleSignIn = async () => {
+    console.log('🔘 Google Sign-In button clicked');
     setError('');
     setLoading(true);
     try {
+      console.log('📤 Initiating Google OAuth redirect...');
       // This will redirect to Google and back - no need to wait for response
       await signInWithGoogle();
+      console.log('⏳ Redirecting to Google (page may redirect)');
       // If we get here, there was an error (redirect didn't happen)
       setError('Unable to start Google sign-in. Please try again.');
     } catch (err: any) {
-      console.error('Google sign-in error:', err);
+      console.error('❌ Google sign-in error:', err);
       setError(err?.message || 'Google sign-in failed. Please try again or use email/password.');
       setLoading(false);
     }
