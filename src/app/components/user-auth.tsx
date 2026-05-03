@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Mail, Lock, User, ArrowRight, CheckCircle } from 'lucide-react';
-import { signUpUser, signInUser, resetPassword } from '../../lib/firebase';
+import { signUpUser, signInUser, resetPassword, signInWithGoogle } from '../../lib/firebase';
 import { useAppStore } from '../store/app-store';
 
 interface UserAuthProps {
@@ -77,13 +77,24 @@ export function UserAuth({ onSuccess }: UserAuthProps) {
     setError('');
     setLoading(true);
     try {
-      // Note: Firebase OAuth requires additional setup in Firebase Console
-      // For now, we recommend using email/password authentication
-      setError('Google sign-in requires additional setup. Please use email and password to sign up.');
-      return;
+      const { user } = await signInWithGoogle();
+
+      if (user) {
+        const newUser = {
+          id: user.uid,
+          email: user.email || '',
+          name: user.displayName || 'User',
+          joinedDate: new Date().toISOString().split('T')[0]
+        };
+        
+        setCurrentUser(newUser);
+        onSuccess();
+      } else {
+        setError('Google sign-in failed. Please try again.');
+      }
     } catch (err: any) {
       console.error('Google sign-in error:', err);
-      setError(err?.message || 'Google sign-in failed.');
+      setError(err?.message || 'Google sign-in failed. Please try again or use email/password.');
     } finally {
       setLoading(false);
     }

@@ -7,7 +7,11 @@ import {
   onAuthStateChanged, 
   User,
   sendPasswordResetEmail,
-  updateProfile
+  updateProfile,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult
 } from 'firebase/auth';
 import { 
   getFirestore, 
@@ -173,6 +177,42 @@ export async function signOutUser() {
     await signOut(auth);
   } catch (error: any) {
     throw new Error(error.message);
+  }
+}
+
+export async function signInWithGoogle() {
+  try {
+    const provider = new GoogleAuthProvider();
+    // Set custom parameters for Google sign-in
+    provider.setCustomParameters({
+      prompt: 'select_account'
+    });
+    
+    const userCredential = await signInWithPopup(auth, provider);
+    const user = userCredential.user;
+
+    // Create/update user document in Firestore
+    const userDocRef = doc(db, 'users', user.uid);
+    await setDoc(userDocRef, {
+      email: user.email,
+      name: user.displayName || 'User',
+      photoUrl: user.photoURL,
+      joinedDate: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }, { merge: true }); // merge: true to not overwrite existing data
+
+    return { user };
+  } catch (error: any) {
+    // Handle specific error codes
+    if (error.code === 'auth/popup-closed-by-user') {
+      throw new Error('Google sign-in was cancelled. Please try again.');
+    } else if (error.code === 'auth/popup-blocked') {
+      throw new Error('Pop-up was blocked. Please enable pop-ups for this site.');
+    } else if (error.code === 'auth/operation-not-supported-in-this-environment') {
+      throw new Error('Google sign-in is not available in this environment. Please use email/password instead.');
+    }
+    throw new Error(error.message || 'Google sign-in failed. Please try again.');
   }
 }
 
