@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Mail, Lock, User, ArrowRight, CheckCircle } from 'lucide-react';
-import { signUpUser, signInUser, resetPassword, signInWithGoogle } from '../../lib/firebase';
+import { signUpUser, signInUser, resetPassword, signInWithGoogle, handleAuthRedirect } from '../../lib/firebase';
 import { useAppStore } from '../store/app-store';
 
 interface UserAuthProps {
@@ -22,6 +22,24 @@ export function UserAuth({ onSuccess }: UserAuthProps) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+
+  // Check for redirect from Google OAuth on component mount
+  useEffect(() => {
+    const checkRedirect = async () => {
+      const result = await handleAuthRedirect();
+      if (result.isRedirectAuth && result.user) {
+        const newUser = {
+          id: result.user.uid,
+          email: result.user.email || '',
+          name: result.user.displayName || 'User',
+          joinedDate: new Date().toISOString().split('T')[0]
+        };
+        setCurrentUser(newUser);
+        onSuccess();
+      }
+    };
+    checkRedirect();
+  }, [setCurrentUser, onSuccess]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -72,30 +90,18 @@ export function UserAuth({ onSuccess }: UserAuthProps) {
     }
   };
 
-  // Handle Google OAuth
+  // Handle Google OAuth (uses redirect flow)
   const handleGoogleSignIn = async () => {
     setError('');
     setLoading(true);
     try {
-      const { user } = await signInWithGoogle();
-
-      if (user) {
-        const newUser = {
-          id: user.uid,
-          email: user.email || '',
-          name: user.displayName || 'User',
-          joinedDate: new Date().toISOString().split('T')[0]
-        };
-        
-        setCurrentUser(newUser);
-        onSuccess();
-      } else {
-        setError('Google sign-in failed. Please try again.');
-      }
+      // This will redirect to Google and back - no need to wait for response
+      await signInWithGoogle();
+      // If we get here, there was an error (redirect didn't happen)
+      setError('Unable to start Google sign-in. Please try again.');
     } catch (err: any) {
       console.error('Google sign-in error:', err);
       setError(err?.message || 'Google sign-in failed. Please try again or use email/password.');
-    } finally {
       setLoading(false);
     }
   };
