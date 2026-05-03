@@ -1,5 +1,6 @@
-import { Minus, Plus, X, Lock } from 'lucide-react';
-import { useAppStore } from '../store/app-store';
+import { Minus, Plus, X, Lock, Gift } from 'lucide-react';
+import { useState } from 'react';
+import { useAppStore, PackagingOption } from '../store/app-store';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 
 interface CartCheckoutProps {
@@ -7,7 +8,8 @@ interface CartCheckoutProps {
 }
 
 export function CartCheckout({ onContinueShopping }: CartCheckoutProps) {
-  const { cartItems, removeFromCart, updateCartQuantity, createOrder } = useAppStore();
+  const { cartItems, removeFromCart, updateCartQuantity, createOrder, packagingOptions } = useAppStore();
+  const [selectedPackaging, setSelectedPackaging] = useState<PackagingOption | undefined>(packagingOptions[0]);
 
   const handleRemoveItem = (productId: string) => {
     removeFromCart(productId);
@@ -20,14 +22,15 @@ export function CartCheckout({ onContinueShopping }: CartCheckoutProps) {
   const handleCheckout = () => {
     const order = createOrder();
     if (order) {
-      alert(`Order placed! Order ID: ${order.id}`);
+      alert(`Order placed successfully! Order ID: ${order.id}\n\nThank you for your purchase!`);
       onContinueShopping();
     }
   };
 
   const subtotal = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const shipping = subtotal >= 200 ? 0 : 15;
-  const total = subtotal + shipping;
+  const shippingCost = subtotal >= 500 ? 0 : 50; // Free shipping over ₹500
+  const packagingCost = selectedPackaging?.price || 0;
+  const total = subtotal + shippingCost + packagingCost;
 
   return (
     <div className="max-w-[1440px] mx-auto px-6 py-12">
@@ -112,44 +115,81 @@ export function CartCheckout({ onContinueShopping }: CartCheckoutProps) {
 
         {/* Order Summary */}
         <div>
-          <div className="bg-white p-8 sticky top-24">
-            <h2 className="font-[var(--font-serif)] text-[20px] mb-6 text-[var(--charcoal)]">
+          <div className="bg-white p-8 sticky top-24 space-y-6">
+            <h2 className="font-[var(--font-serif)] text-[20px] text-[var(--charcoal)]">
               Order Summary
             </h2>
 
-            <div className="space-y-4 mb-6 pb-6 border-b border-[var(--border)]">
+            {/* Packaging Selection */}
+            <div className="pb-6 border-b border-[var(--border)]">
+              <div className="flex items-center gap-2 mb-4">
+                <Gift size={18} className="text-[var(--crimson)]" />
+                <label className="text-[14px] font-medium text-[var(--charcoal)]">
+                  Choose Packaging
+                </label>
+              </div>
+              <div className="space-y-2">
+                {packagingOptions.map((option) => (
+                  <label key={option.id} className="flex items-center gap-3 p-3 border border-gray-200 rounded cursor-pointer hover:border-[var(--crimson)] transition-colors">
+                    <input
+                      type="radio"
+                      name="packaging"
+                      checked={selectedPackaging?.id === option.id}
+                      onChange={() => setSelectedPackaging(option)}
+                      className="w-4 h-4 text-[var(--crimson)]"
+                    />
+                    <div className="flex-1">
+                      <p className="text-[13px] font-medium text-[var(--charcoal)]">{option.label}</p>
+                      <p className="text-[12px] text-gray-500">{option.description}</p>
+                    </div>
+                    <span className="text-[13px] font-medium text-[var(--crimson)]">
+                      {option.price > 0 ? `+₹${option.price}` : 'Free'}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Price Breakdown */}
+            <div className="space-y-4">
               <div className="flex justify-between text-[14px]">
                 <span className="text-[var(--charcoal)]">Subtotal</span>
-                <span className="text-[var(--charcoal)]">₹{subtotal.toFixed(2)}</span>
+                <span className="text-[var(--charcoal)]">₹{subtotal.toLocaleString('en-IN', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</span>
               </div>
               <div className="flex justify-between text-[14px]">
                 <span className="text-[var(--charcoal)]">Shipping</span>
                 <span className="text-[var(--charcoal)]">
-                  {shipping === 0 ? 'Free' : `₹${shipping.toFixed(2)}`}
+                  {shippingCost === 0 ? 'Free' : `₹${shippingCost}`}
                 </span>
               </div>
-              {shipping > 0 && (
+              {shippingCost > 0 && (
                 <p className="text-[12px] text-[var(--light-gray)]">
-                  Add ₹{(200 - subtotal).toFixed(2)} more for free delivery
+                  Add ₹{(500 - subtotal).toLocaleString('en-IN')} more for free delivery
                 </p>
+              )}
+              {packagingCost > 0 && (
+                <div className="flex justify-between text-[14px]">
+                  <span className="text-[var(--charcoal)]">Packaging</span>
+                  <span className="text-[var(--charcoal)]">+₹{packagingCost}</span>
+                </div>
               )}
             </div>
 
-            <div className="flex justify-between mb-8 pb-6 border-b border-[var(--border)]">
+            <div className="flex justify-between pt-4 border-t border-[var(--border)]">
               <span className="font-[var(--font-serif)] text-[18px] text-[var(--charcoal)]">
                 Total
               </span>
               <span className="font-[var(--font-serif)] text-[20px] text-[var(--crimson)]">
-                ₹{total.toFixed(2)}
+                ₹{total.toLocaleString('en-IN', {minimumFractionDigits: 0, maximumFractionDigits: 0})}
               </span>
             </div>
 
             <button
               onClick={handleCheckout}
               disabled={cartItems.length === 0}
-              className="w-full h-14 bg-[var(--crimson)] text-white text-[14px] tracking-wide hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed mb-3"
+              className="w-full h-14 bg-[var(--crimson)] text-white text-[14px] tracking-wide hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Proceed to Checkout
+              Place Order
             </button>
 
             <button
@@ -159,13 +199,16 @@ export function CartCheckout({ onContinueShopping }: CartCheckoutProps) {
               Continue Shopping
             </button>
 
-            <div className="mt-6 pt-6 border-t border-[var(--border)] space-y-3">
+            <div className="pt-4 border-t border-[var(--border)] space-y-3">
               <div className="flex items-start gap-3 text-[12px] text-[var(--charcoal)]">
                 <Lock size={16} className="text-[var(--crimson)] flex-shrink-0" strokeWidth={1.5} />
                 <p>Secure checkout with SSL encryption</p>
               </div>
               <p className="text-[12px] text-[var(--light-gray)] pl-7">
                 30-day return policy on all items
+              </p>
+              <p className="text-[12px] text-[var(--light-gray)] pl-7">
+                ✓ Prices in Indian Rupees (₹)
               </p>
             </div>
           </div>

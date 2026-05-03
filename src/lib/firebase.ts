@@ -628,3 +628,324 @@ export async function deleteUser(userId: string) {
     throw new Error(error.message);
   }
 }
+
+// ===== PACKAGING OPTIONS FUNCTIONS =====
+
+export interface FirebasePackagingOption {
+  id: string;
+  name: string;
+  label: string;
+  description?: string;
+  price: number;
+  currencyCode?: string;
+  isActive: boolean;
+  displayOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function getPackagingOptions(onlyActive: boolean = true) {
+  try {
+    let constraints: QueryConstraint[] = [];
+    if (onlyActive) {
+      constraints.push(where('isActive', '==', true));
+    }
+    constraints.push(orderBy('displayOrder', 'asc'));
+
+    const q = query(collection(db, 'packagingOptions'), ...constraints);
+    const querySnapshot = await getDocs(q);
+    
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    } as FirebasePackagingOption));
+  } catch (error: any) {
+    throw new Error(error.message);
+  }
+}
+
+export async function createPackagingOption(data: Omit<FirebasePackagingOption, 'id' | 'createdAt' | 'updatedAt'>) {
+  try {
+    const docRef = await addDoc(collection(db, 'packagingOptions'), {
+      ...data,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    return { id: docRef.id, ...data };
+  } catch (error: any) {
+    throw new Error(error.message);
+  }
+}
+
+export async function updatePackagingOption(optionId: string, updates: Partial<FirebasePackagingOption>) {
+  try {
+    const optionRef = doc(db, 'packagingOptions', optionId);
+    await updateDoc(optionRef, {
+      ...updates,
+      updatedAt: new Date().toISOString()
+    });
+    return { id: optionId, ...updates };
+  } catch (error: any) {
+    throw new Error(error.message);
+  }
+}
+
+export async function deletePackagingOption(optionId: string) {
+  try {
+    await deleteDoc(doc(db, 'packagingOptions', optionId));
+  } catch (error: any) {
+    throw new Error(error.message);
+  }
+}
+
+// ===== ORDER RETURNS FUNCTIONS =====
+
+export interface FirebaseOrderReturn {
+  id: string;
+  orderId: string;
+  userId: string;
+  productId: string;
+  reason: string;
+  status: 'requested' | 'approved' | 'rejected' | 'completed';
+  requestedDate: string;
+  resolvedDate?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function getOrderReturns(filters?: { status?: string; userId?: string; orderId?: string }) {
+  try {
+    let constraints: QueryConstraint[] = [];
+
+    if (filters?.status) {
+      constraints.push(where('status', '==', filters.status));
+    }
+    if (filters?.userId) {
+      constraints.push(where('userId', '==', filters.userId));
+    }
+    if (filters?.orderId) {
+      constraints.push(where('orderId', '==', filters.orderId));
+    }
+
+    constraints.push(orderBy('requestedDate', 'desc'));
+
+    const q = query(collection(db, 'orderReturns'), ...constraints);
+    const querySnapshot = await getDocs(q);
+    
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    } as FirebaseOrderReturn));
+  } catch (error: any) {
+    throw new Error(error.message);
+  }
+}
+
+export async function createOrderReturn(data: Omit<FirebaseOrderReturn, 'id' | 'createdAt' | 'updatedAt'>) {
+  try {
+    const docRef = await addDoc(collection(db, 'orderReturns'), {
+      ...data,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    return { id: docRef.id, ...data };
+  } catch (error: any) {
+    throw new Error(error.message);
+  }
+}
+
+export async function updateOrderReturn(returnId: string, updates: Partial<FirebaseOrderReturn>) {
+  try {
+    const returnRef = doc(db, 'orderReturns', returnId);
+    await updateDoc(returnRef, {
+      ...updates,
+      updatedAt: new Date().toISOString()
+    });
+    return { id: returnId, ...updates };
+  } catch (error: any) {
+    throw new Error(error.message);
+  }
+}
+
+export async function deleteOrderReturn(returnId: string) {
+  try {
+    await deleteDoc(doc(db, 'orderReturns', returnId));
+  } catch (error: any) {
+    throw new Error(error.message);
+  }
+}
+
+// ===== NAVIGATION MENU FUNCTIONS =====
+
+export interface FirebaseNavigationMenuItem {
+  id: string;
+  label: string;
+  path: string;
+  isActive: boolean;
+  menuOrder: number;
+  iconName?: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function getNavigationMenu(onlyActive: boolean = true) {
+  try {
+    let constraints: QueryConstraint[] = [];
+    if (onlyActive) {
+      constraints.push(where('isActive', '==', true));
+    }
+    constraints.push(orderBy('menuOrder', 'asc'));
+
+    const q = query(collection(db, 'navigationMenu'), ...constraints);
+    const querySnapshot = await getDocs(q);
+    
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    } as FirebaseNavigationMenuItem));
+  } catch (error: any) {
+    throw new Error(error.message);
+  }
+}
+
+export async function createNavigationMenuItem(data: Omit<FirebaseNavigationMenuItem, 'id' | 'createdAt' | 'updatedAt'>) {
+  try {
+    const docRef = await addDoc(collection(db, 'navigationMenu'), {
+      ...data,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    return { id: docRef.id, ...data };
+  } catch (error: any) {
+    throw new Error(error.message);
+  }
+}
+
+export async function updateNavigationMenuItem(menuItemId: string, updates: Partial<FirebaseNavigationMenuItem>) {
+  try {
+    const itemRef = doc(db, 'navigationMenu', menuItemId);
+    await updateDoc(itemRef, {
+      ...updates,
+      updatedAt: new Date().toISOString()
+    });
+    return { id: menuItemId, ...updates };
+  } catch (error: any) {
+    throw new Error(error.message);
+  }
+}
+
+export async function deleteNavigationMenuItem(menuItemId: string) {
+  try {
+    await deleteDoc(doc(db, 'navigationMenu', menuItemId));
+  } catch (error: any) {
+    throw new Error(error.message);
+  }
+}
+
+// ===== USER ANALYTICS FUNCTIONS =====
+
+export interface FirebaseUserAnalytics {
+  id: string;
+  userId: string;
+  totalOrders: number;
+  totalSpent: number;
+  lastOrderDate?: string;
+  frequencyScore: number;
+  returnCount: number;
+  averageOrderValue: number;
+  returnRate: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function getUserAnalytics(userId: string) {
+  try {
+    const q = query(collection(db, 'userAnalytics'), where('userId', '==', userId));
+    const querySnapshot = await getDocs(q);
+
+    if (querySnapshot.docs.length > 0) {
+      const doc = querySnapshot.docs[0];
+      return { id: doc.id, ...doc.data() } as FirebaseUserAnalytics;
+    }
+    return null;
+  } catch (error: any) {
+    throw new Error(error.message);
+  }
+}
+
+export async function createUserAnalytics(data: Omit<FirebaseUserAnalytics, 'id' | 'createdAt' | 'updatedAt'>) {
+  try {
+    const docRef = await addDoc(collection(db, 'userAnalytics'), {
+      ...data,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    return { id: docRef.id, ...data };
+  } catch (error: any) {
+    throw new Error(error.message);
+  }
+}
+
+export async function updateUserAnalytics(analyticsId: string, updates: Partial<FirebaseUserAnalytics>) {
+  try {
+    const analyticsRef = doc(db, 'userAnalytics', analyticsId);
+    await updateDoc(analyticsRef, {
+      ...updates,
+      updatedAt: new Date().toISOString()
+    });
+    return { id: analyticsId, ...updates };
+  } catch (error: any) {
+    throw new Error(error.message);
+  }
+}
+
+export async function getFrequentCustomers(limit: number = 10) {
+  try {
+    const q = query(
+      collection(db, 'userAnalytics'),
+      orderBy('frequencyScore', 'desc'),
+      orderBy('totalSpent', 'desc')
+    );
+    const querySnapshot = await getDocs(q);
+    
+    const results = querySnapshot.docs.slice(0, limit).map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    } as FirebaseUserAnalytics));
+
+    return results;
+  } catch (error: any) {
+    throw new Error(error.message);
+  }
+}
+
+export async function getAnalyticsStats() {
+  try {
+    const [allAnalytics, allReturns, allOrders] = await Promise.all([
+      getDocs(collection(db, 'userAnalytics')),
+      getDocs(collection(db, 'orderReturns')),
+      getDocs(collection(db, 'orders'))
+    ]);
+
+    const totalRevenue = allAnalytics.docs.reduce((sum, doc) => sum + (doc.data().totalSpent || 0), 0);
+    const totalCustomers = allAnalytics.size;
+    const totalReturnRequests = allReturns.size;
+    const returnRate = totalCustomers > 0 ? (totalReturnRequests / totalCustomers) * 100 : 0;
+    const averageOrderValue = allAnalytics.docs.length > 0 
+      ? totalRevenue / allAnalytics.docs.reduce((sum, doc) => sum + (doc.data().totalOrders || 0), 0)
+      : 0;
+
+    return {
+      totalRevenue,
+      totalCustomers,
+      totalReturnRequests,
+      returnRate: parseFloat(returnRate.toFixed(2)),
+      averageOrderValue: parseFloat(averageOrderValue.toFixed(2)),
+      totalOrders: allOrders.size
+    };
+  } catch (error: any) {
+    throw new Error(error.message);
+  }
+}

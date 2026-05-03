@@ -14,10 +14,11 @@ interface ProductCardProps {
   gender?: string;
   isEssential?: boolean;
   offerPercentage?: number;
+  stock?: number;
   onQuickView?: () => void;
 }
 
-export function ProductCard({ id, name, price, image, fabric, fit, gender, isEssential, offerPercentage, onQuickView }: ProductCardProps) {
+export function ProductCard({ id, name, price, image, fabric, fit, gender, isEssential, offerPercentage, stock = 0, onQuickView }: ProductCardProps) {
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const { toggleFavorite, isFavorite } = useAppStore();
 
@@ -60,6 +61,15 @@ export function ProductCard({ id, name, price, image, fabric, fit, gender, isEss
           {isEssential && (
             <div className="absolute top-4 right-14 bg-green-600 text-white px-3 py-1 text-[12px] font-medium">
               ESSENTIAL
+            </div>
+          )}
+
+          {/* Stock Status Badge */}
+          {stock !== undefined && (
+            <div className={`absolute bottom-4 left-4 px-3 py-1 text-[12px] font-medium text-white ${
+              stock > 10 ? 'bg-green-600' : stock > 0 ? 'bg-amber-500' : 'bg-red-600'
+            }`}>
+              {stock > 10 ? '✓ In Stock' : stock > 0 ? `${stock} Left` : 'Out of Stock'}
             </div>
           )}
         

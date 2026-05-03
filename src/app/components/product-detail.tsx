@@ -82,6 +82,18 @@ export function ProductDetail({ product, onFitIntelligenceClick, onAddToCart }: 
                   </span>
                 )}
               </div>
+
+              {/* Stock Status */}
+              {product.stock !== undefined && (
+                <div className={`mt-3 text-[14px] font-medium flex items-center gap-2 ${
+                  product.stock > 10 ? 'text-green-600' : product.stock > 0 ? 'text-amber-600' : 'text-red-600'
+                }`}>
+                  <span className={`w-3 h-3 rounded-full ${
+                    product.stock > 10 ? 'bg-green-600' : product.stock > 0 ? 'bg-amber-600' : 'bg-red-600'
+                  }`}></span>
+                  {product.stock > 10 ? '✓ In Stock' : product.stock > 0 ? `Only ${product.stock} Left` : 'Out of Stock'}
+                </div>
+              )}
             </div>
 
             {/* Fit Intelligence Entry */}
@@ -152,16 +164,17 @@ export function ProductDetail({ product, onFitIntelligenceClick, onAddToCart }: 
           <div className="flex gap-3 mb-12">
             <button
               onClick={() => {
-                if (selectedSize) {
+                if (selectedSize && product.stock > 0) {
                   onAddToCart(product, selectedSize, quantity);
                   setSelectedSize(null);
                   setQuantity(1);
                 }
               }}
-              disabled={!selectedSize}
+              disabled={!selectedSize || product.stock === 0}
               className="flex-1 h-14 bg-[var(--crimson)] text-white text-[14px] tracking-wide hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+              title={product.stock === 0 ? 'Out of stock' : selectedSize ? 'Add to cart' : 'Please select size'}
             >
-              Add to Cart
+              {product.stock === 0 ? 'Out of Stock' : 'Add to Cart'}
             </button>
             <button className="w-14 h-14 border border-[var(--border)] bg-white flex items-center justify-center hover:border-[var(--crimson)] transition-colors">
               <Heart size={20} strokeWidth={1.5} className="text-[var(--charcoal)]" />
@@ -193,7 +206,7 @@ export function ProductDetail({ product, onFitIntelligenceClick, onAddToCart }: 
             <div className="flex flex-col items-center text-center">
               <TruckIcon size={24} strokeWidth={1.5} className="text-[var(--crimson)] mb-2" />
               <p className="text-[13px] text-[var(--charcoal)]">Free Delivery</p>
-              <p className="text-[11px] text-[var(--light-gray)]">Orders over ₹200</p>
+              <p className="text-[11px] text-[var(--light-gray)]">Orders over ₹500</p>
             </div>
             <div className="flex flex-col items-center text-center">
               <RotateCcw size={24} strokeWidth={1.5} className="text-[var(--crimson)] mb-2" />
