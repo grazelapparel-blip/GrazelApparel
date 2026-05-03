@@ -74,13 +74,22 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
   const [showProductModal, setShowProductModal] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
   const [showPackagingModal, setShowPackagingModal] = useState(false);
+  const [showNavigationModal, setShowNavigationModal] = useState(false);
+  const [showFilterModal, setShowFilterModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [editingPackaging, setEditingPackaging] = useState<PackagingOption | null>(null);
+  const [editingNavigation, setEditingNavigation] = useState<NavigationMenuItem | null>(null);
+  const [editingFilter, setEditingFilter] = useState<string | null>(null);
   
   // Category management state
   const [categories, setCategories] = useState<string[]>(["Shirts", "Trousers", "Knitwear", "Outerwear", "Dresses"]);
   const [newCategory, setNewCategory] = useState("");
+  
+  // Filter categories state (Sub-navigation)
+  const [fabricOptions, setFabricOptions] = useState<string[]>(["Cotton", "Linen", "Wool", "Cashmere", "Silk"]);
+  const [fitOptions, setFitOptions] = useState<string[]>(["Slim", "Regular", "Relaxed"]);
+  const [occasionOptions, setOccasionOptions] = useState<string[]>(["Casual", "Business", "Evening", "Weekend"]);
 
   // Form states
   const [productForm, setProductForm] = useState({
@@ -92,6 +101,11 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
   const [packagingForm, setPackagingForm] = useState({
     name: '', label: '', description: '', price: '0'
   });
+  const [navigationForm, setNavigationForm] = useState({
+    label: '', path: '', description: ''
+  });
+  const [filterForm, setFilterForm] = useState('');
+  const [filterType, setFilterType] = useState<'fabric' | 'fit' | 'occasion'>('fabric');
 
   // Category management handlers
   const handleAddCategory = () => {
@@ -153,6 +167,82 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
     setShowPackagingModal(false);
     setEditingPackaging(null);
     setPackagingForm({ name: '', label: '', description: '', price: '0' });
+  };
+
+  // Navigation Menu handlers
+  const handleAddNavigation = () => {
+    if (navigationForm.label && navigationForm.path) {
+      if (editingNavigation) {
+        updateNavMenuItem(editingNavigation.id, {
+          label: navigationForm.label,
+          path: navigationForm.path,
+          description: navigationForm.description
+        });
+      } else {
+        addNavMenuItem({
+          label: navigationForm.label,
+          path: navigationForm.path,
+          description: navigationForm.description,
+          isActive: true,
+          menuOrder: navigationMenu.length + 1
+        });
+      }
+      setNavigationForm({ label: '', path: '', description: '' });
+      setEditingNavigation(null);
+      setShowNavigationModal(false);
+    }
+  };
+
+  const handleEditNavigation = (item: NavigationMenuItem) => {
+    setEditingNavigation(item);
+    setNavigationForm({
+      label: item.label,
+      path: item.path,
+      description: item.description
+    });
+    setShowNavigationModal(true);
+  };
+
+  const handleDeleteNavigation = (id: string) => {
+    if (confirm('Are you sure you want to delete this navigation item?')) {
+      deleteNavMenuItem(id);
+    }
+  };
+
+  const handleCloseNavigationModal = () => {
+    setShowNavigationModal(false);
+    setEditingNavigation(null);
+    setNavigationForm({ label: '', path: '', description: '' });
+  };
+
+  // Filter management handlers
+  const handleAddFilter = () => {
+    if (filterForm.trim()) {
+      if (filterType === 'fabric') {
+        if (!fabricOptions.includes(filterForm)) {
+          setFabricOptions([...fabricOptions, filterForm]);
+        }
+      } else if (filterType === 'fit') {
+        if (!fitOptions.includes(filterForm)) {
+          setFitOptions([...fitOptions, filterForm]);
+        }
+      } else if (filterType === 'occasion') {
+        if (!occasionOptions.includes(filterForm)) {
+          setOccasionOptions([...occasionOptions, filterForm]);
+        }
+      }
+      setFilterForm('');
+    }
+  };
+
+  const handleDeleteFilter = (filterValue: string, type: 'fabric' | 'fit' | 'occasion') => {
+    if (type === 'fabric') {
+      setFabricOptions(fabricOptions.filter(f => f !== filterValue));
+    } else if (type === 'fit') {
+      setFitOptions(fitOptions.filter(f => f !== filterValue));
+    } else if (type === 'occasion') {
+      setOccasionOptions(occasionOptions.filter(f => f !== filterValue));
+    }
   };
 
   useEffect(() => {
@@ -946,28 +1036,187 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
 
         {/* Navigation Menu Tab */}
         {activeTab === 'navigation' && (
-          <div className="bg-white border border-gray-200">
-            <div className="p-6 border-b border-gray-200">
-              <h2 className="font-[var(--font-serif)] text-[18px] text-[var(--charcoal)]">Website Navigation Menu</h2>
-              <p className="text-gray-500 text-[12px] mt-1">Manage menu items and sections</p>
-            </div>
-            <div className="p-6 space-y-3">
-              {navigationMenu.map((item) => (
-                <div key={item.id} className="flex items-center justify-between bg-gray-50 border border-gray-200 p-4 rounded">
-                  <div className="flex items-center gap-3">
-                    <input type="checkbox" checked={item.isActive} onChange={() => updateNavMenuItem(item.id, { isActive: !item.isActive })} />
-                    <div>
-                      <p className="font-medium text-[13px]">{item.label}</p>
-                      <p className="text-[11px] text-gray-500">{item.path}</p>
+          <div className="space-y-6">
+            {/* Main Navigation Menu */}
+            <div className="bg-white border border-gray-200">
+              <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+                <div>
+                  <h2 className="font-[var(--font-serif)] text-[18px] text-[var(--charcoal)]">Main Navigation Menu</h2>
+                  <p className="text-gray-500 text-[12px] mt-1">Manage main menu items</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setEditingNavigation(null);
+                    setNavigationForm({ label: '', path: '', description: '' });
+                    setShowNavigationModal(true);
+                  }}
+                  className="px-4 py-2 bg-[var(--crimson)] text-white text-[12px] rounded hover:opacity-90 flex items-center gap-2"
+                >
+                  <Plus size={16} /> Add Menu Item
+                </button>
+              </div>
+              <div className="p-6 space-y-3">
+                {navigationMenu.map((item) => (
+                  <div key={item.id} className="flex items-center justify-between bg-gray-50 border border-gray-200 p-4 rounded">
+                    <div className="flex items-center gap-3 flex-1">
+                      <input
+                        type="checkbox"
+                        checked={item.isActive}
+                        onChange={() => updateNavMenuItem(item.id, { isActive: !item.isActive })}
+                      />
+                      <div className="flex-1">
+                        <p className="font-medium text-[13px]">{item.label}</p>
+                        <p className="text-[11px] text-gray-500">{item.path} {item.description && `• ${item.description}`}</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleEditNavigation(item)}
+                        className="p-2 text-gray-400 hover:text-[var(--crimson)] transition"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteNavigation(item.id)}
+                        className="p-2 text-gray-400 hover:text-red-600 transition"
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => deleteNavMenuItem(item.id)} className="p-2 text-gray-400 hover:text-red-600">
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Sub-Navigation Filters */}
+            <div className="bg-white border border-gray-200">
+              <div className="p-6 border-b border-gray-200">
+                <h2 className="font-[var(--font-serif)] text-[18px] text-[var(--charcoal)]">Sub-Navigation Filters</h2>
+                <p className="text-gray-500 text-[12px] mt-1">Manage product filter categories</p>
+              </div>
+
+              {/* Fabric Filter */}
+              <div className="p-6 border-b border-gray-200">
+                <h3 className="font-medium text-[14px] mb-4">Fabric Options</h3>
+                <div className="flex gap-2 mb-4">
+                  <input
+                    type="text"
+                    placeholder="Add new fabric"
+                    value={filterType === 'fabric' ? filterForm : ''}
+                    onChange={(e) => filterType === 'fabric' && setFilterForm(e.target.value)}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter' && filterType === 'fabric') {
+                        handleAddFilter();
+                      }
+                    }}
+                    className="flex-1 h-9 px-3 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)] text-[13px]"
+                  />
+                  <button
+                    onClick={() => {
+                      setFilterType('fabric');
+                      handleAddFilter();
+                    }}
+                    className="px-4 py-2 bg-[var(--charcoal)] text-white text-[12px] rounded hover:opacity-90 flex items-center gap-2"
+                  >
+                    <Plus size={14} /> Add
+                  </button>
                 </div>
-              ))}
+                <div className="flex flex-wrap gap-2">
+                  {fabricOptions.map((fabric) => (
+                    <div key={fabric} className="flex items-center gap-2 bg-gray-100 px-3 py-2 rounded text-[12px]">
+                      <span>{fabric}</span>
+                      <button
+                        onClick={() => handleDeleteFilter(fabric, 'fabric')}
+                        className="text-gray-500 hover:text-red-600"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Fit Filter */}
+              <div className="p-6 border-b border-gray-200">
+                <h3 className="font-medium text-[14px] mb-4">Fit Options</h3>
+                <div className="flex gap-2 mb-4">
+                  <input
+                    type="text"
+                    placeholder="Add new fit"
+                    value={filterType === 'fit' ? filterForm : ''}
+                    onChange={(e) => filterType === 'fit' && setFilterForm(e.target.value)}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter' && filterType === 'fit') {
+                        handleAddFilter();
+                      }
+                    }}
+                    className="flex-1 h-9 px-3 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)] text-[13px]"
+                  />
+                  <button
+                    onClick={() => {
+                      setFilterType('fit');
+                      handleAddFilter();
+                    }}
+                    className="px-4 py-2 bg-[var(--charcoal)] text-white text-[12px] rounded hover:opacity-90 flex items-center gap-2"
+                  >
+                    <Plus size={14} /> Add
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {fitOptions.map((fit) => (
+                    <div key={fit} className="flex items-center gap-2 bg-gray-100 px-3 py-2 rounded text-[12px]">
+                      <span>{fit}</span>
+                      <button
+                        onClick={() => handleDeleteFilter(fit, 'fit')}
+                        className="text-gray-500 hover:text-red-600"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Occasion Filter */}
+              <div className="p-6">
+                <h3 className="font-medium text-[14px] mb-4">Occasion Options</h3>
+                <div className="flex gap-2 mb-4">
+                  <input
+                    type="text"
+                    placeholder="Add new occasion"
+                    value={filterType === 'occasion' ? filterForm : ''}
+                    onChange={(e) => filterType === 'occasion' && setFilterForm(e.target.value)}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter' && filterType === 'occasion') {
+                        handleAddFilter();
+                      }
+                    }}
+                    className="flex-1 h-9 px-3 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)] text-[13px]"
+                  />
+                  <button
+                    onClick={() => {
+                      setFilterType('occasion');
+                      handleAddFilter();
+                    }}
+                    className="px-4 py-2 bg-[var(--charcoal)] text-white text-[12px] rounded hover:opacity-90 flex items-center gap-2"
+                  >
+                    <Plus size={14} /> Add
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {occasionOptions.map((occasion) => (
+                    <div key={occasion} className="flex items-center gap-2 bg-gray-100 px-3 py-2 rounded text-[12px]">
+                      <span>{occasion}</span>
+                      <button
+                        onClick={() => handleDeleteFilter(occasion, 'occasion')}
+                        className="text-gray-500 hover:text-red-600"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -1082,6 +1331,48 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
               className="w-full h-9 bg-[var(--crimson)] text-white text-[13px] hover:opacity-90 flex items-center justify-center gap-2"
             >
               <Save size={16} /> {editingPackaging ? 'Update Packaging' : 'Add Packaging'}
+            </button>
+          </div>
+        </Modal>
+
+        {/* Navigation Menu Modal */}
+        <Modal isOpen={showNavigationModal} onClose={handleCloseNavigationModal} title={editingNavigation ? 'Edit Navigation Item' : 'Add Navigation Item'}>
+          <div className="space-y-4 text-[13px]">
+            <div>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1">Menu Label</label>
+              <input
+                type="text"
+                placeholder="e.g., Men, Women, Essentials"
+                value={navigationForm.label}
+                onChange={(e) => setNavigationForm({...navigationForm, label: e.target.value})}
+                className="w-full h-9 px-3 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)]"
+              />
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1">Path/URL</label>
+              <input
+                type="text"
+                placeholder="e.g., /men, /women, /essentials"
+                value={navigationForm.path}
+                onChange={(e) => setNavigationForm({...navigationForm, path: e.target.value})}
+                className="w-full h-9 px-3 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)]"
+              />
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1">Description (Optional)</label>
+              <textarea
+                placeholder="e.g., Men's clothing collection"
+                value={navigationForm.description}
+                onChange={(e) => setNavigationForm({...navigationForm, description: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)] text-[13px]"
+                rows={3}
+              />
+            </div>
+            <button
+              onClick={handleAddNavigation}
+              className="w-full h-9 bg-[var(--crimson)] text-white text-[13px] hover:opacity-90 flex items-center justify-center gap-2"
+            >
+              <Save size={16} /> {editingNavigation ? 'Update Item' : 'Add Item'}
             </button>
           </div>
         </Modal>
