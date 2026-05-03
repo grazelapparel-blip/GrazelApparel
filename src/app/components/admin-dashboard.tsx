@@ -882,22 +882,65 @@ export function AdminDashboard({ onBack }: AdminDashboardProps) {
                   onChange={(e) => setProductForm({...productForm, image: e.target.value})}
                   className="w-full h-9 px-3 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)]"
                 />
+                
+                {/* Category Selection */}
+                <select value={productForm.category} onChange={(e) => setProductForm({...productForm, category: e.target.value})} className="w-full h-9 px-3 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)]">
+                  <option value="">Select Category</option>
+                  {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                </select>
+
+                {/* Sub-Categories (Filters) - Only show when category is selected */}
+                {productForm.category && (
+                  <div className="bg-blue-50 p-3 rounded border border-blue-200">
+                    <p className="text-[11px] font-medium text-blue-800 mb-3">Sub-Categories for "{productForm.category}"</p>
+                    
+                    <div className="space-y-3">
+                      {/* Fabric Filter */}
+                      <div>
+                        <label className="text-[11px] font-medium text-gray-700 block mb-1">Fabric</label>
+                        <select value={productForm.fabric} onChange={(e) => setProductForm({...productForm, fabric: e.target.value})} className="w-full h-8 px-2 border border-gray-200 rounded text-[12px] focus:outline-none focus:border-[var(--crimson)]">
+                          <option value="">Select Fabric</option>
+                          {fabricOptions.map(f => <option key={f} value={f}>{f}</option>)}
+                        </select>
+                      </div>
+
+                      {/* Fit Filter */}
+                      <div>
+                        <label className="text-[11px] font-medium text-gray-700 block mb-1">Fit</label>
+                        <select value={productForm.fit} onChange={(e) => setProductForm({...productForm, fit: e.target.value})} className="w-full h-8 px-2 border border-gray-200 rounded text-[12px] focus:outline-none focus:border-[var(--crimson)]">
+                          <option value="">Select Fit</option>
+                          {fitOptions.map(f => <option key={f} value={f}>{f}</option>)}
+                        </select>
+                      </div>
+
+                      {/* Occasion Filter */}
+                      <div>
+                        <label className="text-[11px] font-medium text-gray-700 block mb-1">Occasion</label>
+                        <select value={productForm.festival} onChange={(e) => setProductForm({...productForm, festival: e.target.value})} className="w-full h-8 px-2 border border-gray-200 rounded text-[12px] focus:outline-none focus:border-[var(--crimson)]">
+                          <option value="">Select Occasion</option>
+                          {occasionOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-3">
-                  <input type="text" placeholder="Fabric" value={productForm.fabric} onChange={(e) => setProductForm({...productForm, fabric: e.target.value})} className="h-9 px-3 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)]" />
-                  <input type="text" placeholder="Fit" value={productForm.fit} onChange={(e) => setProductForm({...productForm, fit: e.target.value})} className="h-9 px-3 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)]" />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <select value={productForm.category} onChange={(e) => setProductForm({...productForm, category: e.target.value})} className="h-9 px-3 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)]">
-                    <option value="">Select Category</option>
-                    {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                  </select>
                   <select value={productForm.gender} onChange={(e) => setProductForm({...productForm, gender: e.target.value})} className="h-9 px-3 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)]">
                     <option value="">Gender</option>
                     <option value="Men">Men</option>
                     <option value="Women">Women</option>
                     <option value="Unisex">Unisex</option>
                   </select>
+                  <input
+                    type="number"
+                    placeholder="Offer %"
+                    value={productForm.offerPercentage}
+                    onChange={(e) => setProductForm({...productForm, offerPercentage: e.target.value})}
+                    className="h-9 px-3 border border-gray-200 rounded focus:outline-none focus:border-[var(--crimson)]"
+                  />
                 </div>
+
                 <button onClick={handleSaveProduct} className="w-full h-9 bg-[var(--crimson)] text-white text-[13px] hover:opacity-90 flex items-center justify-center gap-2">
                   <Save size={16} /> Save Product
                 </button>
